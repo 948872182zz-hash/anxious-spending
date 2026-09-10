@@ -246,6 +246,7 @@ fun AnxiousSpendingApp(
     var rateSnapshot by remember { mutableStateOf(exchangeRateStore.load()) }
     var page by remember { mutableIntStateOf(0) }
     var showAdd by remember { mutableStateOf(false) }
+    var showImport by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<Expense?>(null) }
     var pendingEdit by remember { mutableStateOf<Expense?>(null) }
 
@@ -268,12 +269,19 @@ fun AnxiousSpendingApp(
 
     Scaffold(
         topBar = {
-            TopAppBar(title = {
-                Column {
-                    Text("坚持焦虑地花钱中", fontWeight = FontWeight.SemiBold)
-                    Text("Spending Anxiously, Consistently.", style = MaterialTheme.typography.labelSmall)
+            TopAppBar(
+                title = {
+                    Column {
+                        Text("坚持焦虑地花钱中", fontWeight = FontWeight.SemiBold)
+                        Text("Spending Anxiously, Consistently.", style = MaterialTheme.typography.labelSmall)
+                    }
+                },
+                actions = {
+                    if (page == 0) {
+                        TextButton(onClick = { showImport = true }) { Text("导入") }
+                    }
                 }
-            })
+            )
         },
         bottomBar = {
             NavigationBar {
@@ -301,6 +309,17 @@ fun AnxiousSpendingApp(
             if (page == 0) LedgerPage(entries, { pendingEdit = it }, { pendingDelete = it })
             else AnalyticsHub(entries)
         }
+    }
+
+    if (showImport) {
+        BatchImportDialog(
+            existingEntries = entries,
+            onDismiss = { showImport = false },
+            onImport = { imported ->
+                persist(entries + imported)
+                showImport = false
+            }
+        )
     }
 
     if (showAdd) {
