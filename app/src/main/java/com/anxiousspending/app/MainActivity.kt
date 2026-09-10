@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -22,7 +21,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -44,10 +42,11 @@ import java.util.UUID
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val store = ExpenseStore(this)
+        val expenseStore = ExpenseStore(this)
+        val noteTagStore = NoteTagStore(this)
         setContent {
             MaterialTheme {
-                AnxiousSpendingApp(store)
+                AnxiousSpendingApp(expenseStore, noteTagStore)
             }
         }
     }
@@ -66,6 +65,7 @@ data class CategoryOption(val key: String, val subtitle: String)
 private data class NoteSuggestion(
     val text: String,
     val count: Int,
+    val clickCount: Int,
     val lastUsed: LocalDate
 )
 
@@ -114,7 +114,10 @@ private fun formatDateInput(raw: String): String {
 private fun parseDateInput(text: String): LocalDate? =
     runCatching { LocalDate.parse(text, dateParseFormatter) }.getOrNull()
 
-private fun buildNoteSuggestions(expenses: List<Expense>): List<NoteSuggestion> =
+private fun buildNoteSuggestions(
+    expenses: List<Expense>,
+    clickCounts: Map<String, Int>
+): List<NoteSuggestion> =
     expenses
         .filter { it.note.trim().isNotEmpty() }
         .groupBy { it.note.trim() }
@@ -122,12 +125,14 @@ private fun buildNoteSuggestions(expenses: List<Expense>): List<NoteSuggestion> 
             NoteSuggestion(
                 text = text,
                 count = matches.size,
+                clickCount = clickCounts[text] ?: 0,
                 lastUsed = matches.maxOf { it.date }
             )
         }
         .filter { it.count >= 3 }
         .sortedWith(
-            compareByDescending<NoteSuggestion> { it.count }
+            compareByDescending<NoteSuggestion> { it.clickCount }
+                .thenByDescending { it.count }
                 .thenByDescending { it.lastUsed }
                 .thenBy { it.text }
         )
@@ -141,6 +146,7 @@ private fun evaluateExpression(raw: String): Double? {
     var index = 0
 
     fun precedence(op: Char): Int = if (op == '*' || op == '/') 2 else 1
+
     fun applyTop(): Boolean {
         if (numbers.size < 2 || operators.isEmpty()) return false
         val b = numbers.removeAt(numbers.lastIndex)
@@ -183,22 +189,33 @@ private fun evaluateExpression(raw: String): Double? {
     while (operators.isNotEmpty()) {
         if (!applyTop()) return null
     }
+
     return numbers.singleOrNull()?.takeIf { it.isFinite() }
 }
 
 @Composable
-fun AnxiousSpendingApp(store: ExpenseStore) {
+fun AnxiousSpendingApp(
+    store: ExpenseStore,
+    noteTagStore: NoteTagStore
+) {
     var expenses by remember { mutableStateOf(store.load()) }
+    var noteTagClicks by remember { mutableStateOf(noteTagStore.loadClickCounts()) }
     var page by remember { mutableIntStateOf(0) }
     var showAdd by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<Expense?>(null) }
     var pendingEdit by remember { mutableStateOf<Expense?>(null) }
 
-    val noteSuggestions = remember(expenses) { buildNoteSuggestions(expenses) }
+    val noteSuggestions = remember(expenses, noteTagClicks) {
+        buildNoteSuggestions(expenses, noteTagClicks)
+    }
 
     fun persist(next: List<Expense>) {
         expenses = next.sortedWith(compareByDescending<Expense> { it.date }.thenByDescending { it.id })
         store.save(expenses)
+    }
+
+    fun registerNoteTagClick(text: String) {
+        noteTagClicks = noteTagStore.incrementClick(text)
     }
 
     Scaffold(
@@ -253,6 +270,7 @@ fun AnxiousSpendingApp(store: ExpenseStore) {
         ExpenseDialog(
             initialExpense = null,
             noteSuggestions = noteSuggestions,
+            onNoteTagClick = ::registerNoteTagClick,
             onDismiss = { showAdd = false },
             onSave = {
                 persist(expenses + it)
@@ -265,6 +283,7 @@ fun AnxiousSpendingApp(store: ExpenseStore) {
         ExpenseDialog(
             initialExpense = editing,
             noteSuggestions = noteSuggestions,
+            onNoteTagClick = ::registerNoteTagClick,
             onDismiss = { pendingEdit = null },
             onSave = { updated ->
                 persist(expenses.map { if (it.id == updated.id) updated else it })
@@ -305,6 +324,7 @@ private fun LedgerPage(
     }
 
     val grouped = expenses.groupBy { it.date }.toSortedMap(compareByDescending { it })
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -317,6 +337,7 @@ private fun LedgerPage(
                     Text("¥%.2f".format(dayExpenses.sumOf { it.amount }))
                 }
             }
+
             items(dayExpenses, key = { it.id }) { expense ->
                 ElevatedCard(Modifier.fillMaxWidth()) {
                     Row(
@@ -407,7 +428,11 @@ private fun AnalysisPage(expenses: List<Expense>) {
         }
 
         item {
-            val title = if (analysisMode == 0) "$selectedYear 年 $selectedMonth 月支出" else "$selectedYear 年支出"
+            val title = if (analysisMode == 0) {
+                "$selectedYear 年 $selectedMonth 月支出"
+            } else {
+                "$selectedYear 年支出"
+            }
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text("¥%.2f".format(activeExpenses.sumOf { it.amount }), style = MaterialTheme.typography.headlineMedium)
@@ -416,7 +441,9 @@ private fun AnalysisPage(expenses: List<Expense>) {
         }
 
         if (analysisMode == 1) {
-            item { Text("每月", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
+            item {
+                Text("每月", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            }
             if (nonEmptyMonths.isEmpty()) {
                 item { Text("这一年还没有账。") }
             } else {
@@ -429,10 +456,14 @@ private fun AnalysisPage(expenses: List<Expense>) {
             }
         }
 
-        item { Text("分类", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
+        item {
+            Text("分类", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        }
 
         if (activeExpenses.isEmpty()) {
-            item { Text(if (analysisMode == 0) "这个月还没有账。" else "这一年还没有账。") }
+            item {
+                Text(if (analysisMode == 0) "这个月还没有账。" else "这一年还没有账。")
+            }
         } else {
             items(
                 activeExpenses.groupBy { it.category }
@@ -468,12 +499,14 @@ private fun CompactSelector(
                 modifier = Modifier.width(48.dp),
                 contentPadding = PaddingValues(0.dp)
             ) { Text("‹") }
+
             Text(
                 value,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.weight(1f)
             )
+
             TextButton(
                 onClick = onNext,
                 modifier = Modifier.width(48.dp),
@@ -487,15 +520,21 @@ private fun CompactSelector(
 private fun ExpenseDialog(
     initialExpense: Expense?,
     noteSuggestions: List<NoteSuggestion>,
+    onNoteTagClick: (String) -> Unit,
     onDismiss: () -> Unit,
     onSave: (Expense) -> Unit
 ) {
     var expression by remember(initialExpense?.id) {
         mutableStateOf(initialExpense?.let { formatAmount(it.amount) }.orEmpty())
     }
-    var note by remember(initialExpense?.id) { mutableStateOf(initialExpense?.note.orEmpty()) }
+    var note by remember(initialExpense?.id) {
+        mutableStateOf(initialExpense?.note.orEmpty())
+    }
     var categoryIndex by remember(initialExpense?.id) {
-        mutableIntStateOf(categories.indexOfFirst { it.key == initialExpense?.category }.takeIf { it >= 0 } ?: 0)
+        mutableIntStateOf(
+            categories.indexOfFirst { it.key == initialExpense?.category }
+                .takeIf { it >= 0 } ?: 0
+        )
     }
     var categoryMenu by remember { mutableStateOf(false) }
     var dateText by remember(initialExpense?.id) {
@@ -510,10 +549,16 @@ private fun ExpenseDialog(
         if (token in operators) {
             if (expression.isBlank()) return
             val last = expression.last().toString()
-            expression = if (last in operators) expression.dropLast(1) + token else expression + token
+            expression = if (last in operators) {
+                expression.dropLast(1) + token
+            } else {
+                expression + token
+            }
         } else if (token == ".") {
             val currentNumber = expression.takeLastWhile { it.isDigit() || it == '.' }
-            if (!currentNumber.contains('.')) expression += if (currentNumber.isEmpty()) "0." else "."
+            if (!currentNumber.contains('.')) {
+                expression += if (currentNumber.isEmpty()) "0." else "."
+            }
         } else {
             expression += token
         }
@@ -565,7 +610,9 @@ private fun ExpenseDialog(
                     OutlinedTextField(
                         value = expression,
                         onValueChange = { next ->
-                            val allowed = next.filter { it.isDigit() || it in listOf('.', '+', '-', '×', '÷', '*', '/') }
+                            val allowed = next.filter {
+                                it.isDigit() || it in listOf('.', '+', '-', '×', '÷', '*', '/')
+                            }
                             expression = allowed.replace('*', '×').replace('/', '÷')
                             calculatorError = false
                         },
@@ -573,7 +620,9 @@ private fun ExpenseDialog(
                         supportingText = {
                             when {
                                 calculatorError -> Text("这个算式算不出来")
-                                calculatedAmount != null && expression.any { it in "+-×÷" } -> Text("= ¥${formatAmount(calculatedAmount)}")
+                                calculatedAmount != null && expression.any { it in "+-×÷" } -> {
+                                    Text("= ¥${formatAmount(calculatedAmount)}")
+                                }
                                 else -> Text("可以直接输入，也可以用下面的计算器")
                             }
                         },
@@ -603,10 +652,16 @@ private fun ExpenseDialog(
 
                 item {
                     Box {
-                        OutlinedButton(onClick = { categoryMenu = true }, modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(
+                            onClick = { categoryMenu = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
                             Text(categories[categoryIndex].subtitle, fontWeight = FontWeight.SemiBold)
                         }
-                        DropdownMenu(expanded = categoryMenu, onDismissRequest = { categoryMenu = false }) {
+                        DropdownMenu(
+                            expanded = categoryMenu,
+                            onDismissRequest = { categoryMenu = false }
+                        ) {
                             categories.forEachIndexed { index, item ->
                                 DropdownMenuItem(
                                     text = { Text(item.subtitle, fontWeight = FontWeight.Medium) },
@@ -651,18 +706,25 @@ private fun ExpenseDialog(
                     )
                 }
 
-                if (noteSuggestions.isNotEmpty()) {
-                    item {
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("常用备注", style = MaterialTheme.typography.labelMedium)
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("常用备注", style = MaterialTheme.typography.labelMedium)
+                        if (noteSuggestions.isEmpty()) {
+                            Text(
+                                "同一备注保存满 3 次后，会自动固定成标签",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else {
                             LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 items(noteSuggestions, key = { it.text }) { suggestion ->
                                     AssistChip(
                                         onClick = {
                                             note = suggestion.text
+                                            onNoteTagClick(suggestion.text)
                                             finishDialogEditing()
                                         },
-                                        label = { Text("${suggestion.text} · ${suggestion.count}") }
+                                        label = { Text("${suggestion.text} · ${suggestion.count}次") }
                                     )
                                 }
                             }
@@ -671,40 +733,36 @@ private fun ExpenseDialog(
                 }
 
                 item {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Text("日期：")
-                            Column(Modifier.width(128.dp)) {
-                                BasicTextField(
-                                    value = dateText,
-                                    onValueChange = { next ->
-                                        val formatted = formatDateInput(next)
-                                        dateText = formatted
-                                        dateError = formatted.length == 10 && parseDateInput(formatted) == null
-                                    },
-                                    textStyle = MaterialTheme.typography.bodyLarge.copy(
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    ),
-                                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                                    singleLine = true,
-                                    keyboardOptions = KeyboardOptions(
-                                        keyboardType = KeyboardType.Number,
-                                        imeAction = ImeAction.Done
-                                    ),
-                                    keyboardActions = KeyboardActions(
-                                        onDone = {
-                                            dateError = parseDateInput(dateText) == null
-                                            if (!dateError) finishDialogEditing()
-                                        }
-                                    ),
-                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
-                                )
-                                HorizontalDivider(
-                                    color = if (dateError) MaterialTheme.colorScheme.error
-                                    else MaterialTheme.colorScheme.outlineVariant
-                                )
-                            }
+                            OutlinedTextField(
+                                value = dateText,
+                                onValueChange = { next ->
+                                    val formatted = formatDateInput(next)
+                                    dateText = formatted
+                                    dateError = formatted.length == 10 && parseDateInput(formatted) == null
+                                },
+                                placeholder = { Text("yyyy/mm/dd") },
+                                singleLine = true,
+                                isError = dateError,
+                                keyboardOptions = KeyboardOptions(
+                                    keyboardType = KeyboardType.Number,
+                                    imeAction = ImeAction.Done
+                                ),
+                                keyboardActions = KeyboardActions(
+                                    onDone = {
+                                        dateError = parseDateInput(dateText) == null
+                                        if (!dateError) finishDialogEditing()
+                                    }
+                                ),
+                                modifier = Modifier.weight(1f)
+                            )
                         }
+
                         if (dateError) {
                             Text(
                                 "日期无效，请按 yyyy/mm/dd 输入",
@@ -712,12 +770,20 @@ private fun ExpenseDialog(
                                 color = MaterialTheme.colorScheme.error
                             )
                         }
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
                             TextButton(
                                 enabled = parsedDate != null,
                                 onClick = { parsedDate?.let { setDate(it.minusDays(1)) } }
                             ) { Text("−1天") }
-                            TextButton(onClick = { setDate(LocalDate.now()) }) { Text("今天") }
+
+                            TextButton(onClick = { setDate(LocalDate.now()) }) {
+                                Text("今天")
+                            }
+
                             TextButton(
                                 enabled = parsedDate != null,
                                 onClick = { parsedDate?.let { setDate(it.plusDays(1)) } }
@@ -743,7 +809,9 @@ private fun ExpenseDialog(
                         )
                     )
                 }
-            ) { Text(if (initialExpense == null) "保存" else "保存修改") }
+            ) {
+                Text(if (initialExpense == null) "保存" else "保存修改")
+            }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("取消") }
@@ -788,7 +856,9 @@ private fun CalculatorPad(
                         Text(label)
                     }
                 }
-                repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
+                repeat(4 - row.size) {
+                    Spacer(Modifier.weight(1f))
+                }
             }
         }
     }
