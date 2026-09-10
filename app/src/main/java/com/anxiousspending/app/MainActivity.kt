@@ -40,16 +40,16 @@ data class Expense(
 )
 
 private val categories = listOf(
-    "shopping" to "buy sth new",
-    "food" to "eating",
+    "shopping" to "BUY STH NEW",
+    "food" to "EATING",
     "game" to "婷芷我说婷芷",
     "ai" to "别BAN我",
     "misc" to "生活杂费",
     "transport" to "🚈🚕🚌嘟嘟",
-    "travel" to "Go go go出发喽",
-    "snack" to "stop eat",
+    "travel" to "GO GO GO出发喽",
+    "snack" to "STOP EAT",
     "books" to "今天你看书了吗",
-    "investment" to "hope💹",
+    "investment" to "HOPE💹",
     "medical" to "今天哪里又痛了我的大小姐"
 )
 
