@@ -36,7 +36,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-import java.time.format.ResolverStyle
 import java.util.UUID
 
 class MainActivity : ComponentActivity() {
@@ -83,11 +82,6 @@ private val categories = listOf(
     CategoryOption("medical", "今天哪里又痛了我的大小姐")
 )
 
-private val dateDisplayFormatter = DateTimeFormatter.ofPattern("yyyy/MM/dd")
-private val dateParseFormatter = DateTimeFormatter
-    .ofPattern("uuuu/MM/dd")
-    .withResolverStyle(ResolverStyle.STRICT)
-
 private fun categorySubtitle(key: String): String =
     categories.firstOrNull { it.key == key }?.subtitle ?: key
 
@@ -96,23 +90,16 @@ private fun formatAmount(value: Double): String {
     return fixed.trimEnd('0').trimEnd('.')
 }
 
-private fun formatDateInput(raw: String): String {
-    val digits = raw.filter { it.isDigit() }.take(8)
-    return buildString {
-        append(digits.take(4))
-        if (digits.length > 4) {
-            append('/')
-            append(digits.substring(4, minOf(6, digits.length)))
-        }
-        if (digits.length > 6) {
-            append('/')
-            append(digits.substring(6))
-        }
-    }
+private fun parseDateParts(year: String, month: String, day: String): LocalDate? {
+    if (year.length != 4 || month.isBlank() || day.isBlank()) return null
+    return runCatching {
+        LocalDate.of(
+            year.toInt(),
+            month.toInt(),
+            day.toInt()
+        )
+    }.getOrNull()
 }
-
-private fun parseDateInput(text: String): LocalDate? =
-    runCatching { LocalDate.parse(text, dateParseFormatter) }.getOrNull()
 
 private fun buildNoteSuggestions(
     expenses: List<Expense>,
@@ -537,9 +524,10 @@ private fun ExpenseDialog(
         )
     }
     var categoryMenu by remember { mutableStateOf(false) }
-    var dateText by remember(initialExpense?.id) {
-        mutableStateOf((initialExpense?.date ?: LocalDate.now()).format(dateDisplayFormatter))
-    }
+    val startingDate = initialExpense?.date ?: LocalDate.now()
+    var dateYear by remember(initialExpense?.id) { mutableStateOf(startingDate.year.toString()) }
+    var dateMonth by remember(initialExpense?.id) { mutableStateOf(startingDate.monthValue.toString().padStart(2, '0')) }
+    var dateDay by remember(initialExpense?.id) { mutableStateOf(startingDate.dayOfMonth.toString().padStart(2, '0')) }
     var dateError by remember(initialExpense?.id) { mutableStateOf(false) }
     var calculatorError by remember { mutableStateOf(false) }
 
@@ -574,8 +562,15 @@ private fun ExpenseDialog(
         }
     }
 
+    fun setDateParts(date: LocalDate) {
+        dateYear = date.year.toString()
+        dateMonth = date.monthValue.toString().padStart(2, '0')
+        dateDay = date.dayOfMonth.toString().padStart(2, '0')
+        dateError = false
+    }
+
     val calculatedAmount = evaluateExpression(expression) ?: expression.toDoubleOrNull()
-    val parsedDate = parseDateInput(dateText)
+    val parsedDate = parseDateParts(dateYear, dateMonth, dateDay)
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -598,11 +593,6 @@ private fun ExpenseDialog(
                 dialogView.post {
                     inputMethodManager.hideSoftInputFromWindow(dialogView.windowToken, 0)
                 }
-            }
-
-            fun setDate(date: LocalDate) {
-                dateText = date.format(dateDisplayFormatter)
-                dateError = false
             }
 
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -740,32 +730,71 @@ private fun ExpenseDialog(
                         ) {
                             Text("日期：")
                             OutlinedTextField(
-                                value = dateText,
+                                value = dateYear,
                                 onValueChange = { next ->
-                                    val formatted = formatDateInput(next)
-                                    dateText = formatted
-                                    dateError = formatted.length == 10 && parseDateInput(formatted) == null
+                                    dateYear = next.filter { it.isDigit() }.take(4)
+                                    dateError = false
                                 },
-                                placeholder = { Text("yyyy/mm/dd") },
+                                placeholder = { Text("yyyy") },
                                 singleLine = true,
-                                isError = dateError,
+                                keyboardOptions = KeyboardOptions(
+                                    keyboardType = KeyboardType.Number,
+                                    imeAction = ImeAction.Next
+                                ),
+                                modifier = Modifier.weight(1.35f)
+                            )
+                            Text(" / ", fontWeight = FontWeight.SemiBold)
+                            OutlinedTextField(
+                                value = dateMonth,
+                                onValueChange = { next ->
+                                    dateMonth = next.filter { it.isDigit() }.take(2)
+                                    dateError = false
+                                },
+                                placeholder = { Text("mm") },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(
+                                    keyboardType = KeyboardType.Number,
+                                    imeAction = ImeAction.Next
+                                ),
+                                modifier = Modifier.weight(0.85f)
+                            )
+                            Text(" / ", fontWeight = FontWeight.SemiBold)
+                            OutlinedTextField(
+                                value = dateDay,
+                                onValueChange = { next ->
+                                    dateDay = next.filter { it.isDigit() }.take(2)
+                                    dateError = false
+                                },
+                                placeholder = { Text("dd") },
+                                singleLine = true,
                                 keyboardOptions = KeyboardOptions(
                                     keyboardType = KeyboardType.Number,
                                     imeAction = ImeAction.Done
                                 ),
                                 keyboardActions = KeyboardActions(
                                     onDone = {
-                                        dateError = parseDateInput(dateText) == null
+                                        dateError = parseDateParts(dateYear, dateMonth, dateDay) == null
                                         if (!dateError) finishDialogEditing()
                                     }
                                 ),
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(0.85f)
                             )
+                            IconButton(
+                                onClick = {
+                                    dateYear = ""
+                                    dateMonth = ""
+                                    dateDay = ""
+                                    dateError = false
+                                },
+                                modifier = Modifier.size(34.dp)
+                            ) {
+                                Text("×", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Black)
+                            }
                         }
 
-                        if (dateError) {
+                        if (dateError || (dateYear.isNotBlank() || dateMonth.isNotBlank() || dateDay.isNotBlank()) && parsedDate == null) {
                             Text(
-                                "日期无效，请按 yyyy/mm/dd 输入",
+                                "日期无效，请按 yyyy / mm / dd 输入",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.error
                             )
@@ -777,16 +806,16 @@ private fun ExpenseDialog(
                         ) {
                             TextButton(
                                 enabled = parsedDate != null,
-                                onClick = { parsedDate?.let { setDate(it.minusDays(1)) } }
+                                onClick = { parsedDate?.let { setDateParts(it.minusDays(1)) } }
                             ) { Text("−1天") }
 
-                            TextButton(onClick = { setDate(LocalDate.now()) }) {
+                            TextButton(onClick = { setDateParts(LocalDate.now()) }) {
                                 Text("今天")
                             }
 
                             TextButton(
                                 enabled = parsedDate != null,
-                                onClick = { parsedDate?.let { setDate(it.plusDays(1)) } }
+                                onClick = { parsedDate?.let { setDateParts(it.plusDays(1)) } }
                             ) { Text("+1天") }
                         }
                     }
