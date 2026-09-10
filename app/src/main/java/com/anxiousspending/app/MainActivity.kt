@@ -10,7 +10,9 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -20,6 +22,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -35,6 +38,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import java.time.format.ResolverStyle
 import java.util.UUID
 
 class MainActivity : ComponentActivity() {
@@ -59,6 +63,12 @@ data class Expense(
 
 data class CategoryOption(val key: String, val subtitle: String)
 
+private data class NoteSuggestion(
+    val text: String,
+    val count: Int,
+    val lastUsed: LocalDate
+)
+
 private val categories = listOf(
     CategoryOption("shopping", "BUY STH NEW"),
     CategoryOption("food", "EATING"),
@@ -73,6 +83,11 @@ private val categories = listOf(
     CategoryOption("medical", "今天哪里又痛了我的大小姐")
 )
 
+private val dateDisplayFormatter = DateTimeFormatter.ofPattern("yyyy/MM/dd")
+private val dateParseFormatter = DateTimeFormatter
+    .ofPattern("uuuu/MM/dd")
+    .withResolverStyle(ResolverStyle.STRICT)
+
 private fun categorySubtitle(key: String): String =
     categories.firstOrNull { it.key == key }?.subtitle ?: key
 
@@ -80,6 +95,42 @@ private fun formatAmount(value: Double): String {
     val fixed = "%.2f".format(value)
     return fixed.trimEnd('0').trimEnd('.')
 }
+
+private fun formatDateInput(raw: String): String {
+    val digits = raw.filter { it.isDigit() }.take(8)
+    return buildString {
+        append(digits.take(4))
+        if (digits.length > 4) {
+            append('/')
+            append(digits.substring(4, minOf(6, digits.length)))
+        }
+        if (digits.length > 6) {
+            append('/')
+            append(digits.substring(6))
+        }
+    }
+}
+
+private fun parseDateInput(text: String): LocalDate? =
+    runCatching { LocalDate.parse(text, dateParseFormatter) }.getOrNull()
+
+private fun buildNoteSuggestions(expenses: List<Expense>): List<NoteSuggestion> =
+    expenses
+        .filter { it.note.trim().isNotEmpty() }
+        .groupBy { it.note.trim() }
+        .map { (text, matches) ->
+            NoteSuggestion(
+                text = text,
+                count = matches.size,
+                lastUsed = matches.maxOf { it.date }
+            )
+        }
+        .filter { it.count >= 3 }
+        .sortedWith(
+            compareByDescending<NoteSuggestion> { it.count }
+                .thenByDescending { it.lastUsed }
+                .thenBy { it.text }
+        )
 
 private fun evaluateExpression(raw: String): Double? {
     val expression = raw.replace("×", "*").replace("÷", "/").replace(" ", "")
@@ -143,6 +194,8 @@ fun AnxiousSpendingApp(store: ExpenseStore) {
     var pendingDelete by remember { mutableStateOf<Expense?>(null) }
     var pendingEdit by remember { mutableStateOf<Expense?>(null) }
 
+    val noteSuggestions = remember(expenses) { buildNoteSuggestions(expenses) }
+
     fun persist(next: List<Expense>) {
         expenses = next.sortedWith(compareByDescending<Expense> { it.date }.thenByDescending { it.id })
         store.save(expenses)
@@ -199,6 +252,7 @@ fun AnxiousSpendingApp(store: ExpenseStore) {
     if (showAdd) {
         ExpenseDialog(
             initialExpense = null,
+            noteSuggestions = noteSuggestions,
             onDismiss = { showAdd = false },
             onSave = {
                 persist(expenses + it)
@@ -210,6 +264,7 @@ fun AnxiousSpendingApp(store: ExpenseStore) {
     pendingEdit?.let { editing ->
         ExpenseDialog(
             initialExpense = editing,
+            noteSuggestions = noteSuggestions,
             onDismiss = { pendingEdit = null },
             onSave = { updated ->
                 persist(expenses.map { if (it.id == updated.id) updated else it })
@@ -431,6 +486,7 @@ private fun CompactSelector(
 @Composable
 private fun ExpenseDialog(
     initialExpense: Expense?,
+    noteSuggestions: List<NoteSuggestion>,
     onDismiss: () -> Unit,
     onSave: (Expense) -> Unit
 ) {
@@ -442,9 +498,10 @@ private fun ExpenseDialog(
         mutableIntStateOf(categories.indexOfFirst { it.key == initialExpense?.category }.takeIf { it >= 0 } ?: 0)
     }
     var categoryMenu by remember { mutableStateOf(false) }
-    var selectedDate by remember(initialExpense?.id) {
-        mutableStateOf(initialExpense?.date ?: LocalDate.now())
+    var dateText by remember(initialExpense?.id) {
+        mutableStateOf((initialExpense?.date ?: LocalDate.now()).format(dateDisplayFormatter))
     }
+    var dateError by remember(initialExpense?.id) { mutableStateOf(false) }
     var calculatorError by remember { mutableStateOf(false) }
 
     fun appendToken(token: String) {
@@ -473,6 +530,7 @@ private fun ExpenseDialog(
     }
 
     val calculatedAmount = evaluateExpression(expression) ?: expression.toDoubleOrNull()
+    val parsedDate = parseDateInput(dateText)
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -495,6 +553,11 @@ private fun ExpenseDialog(
                 dialogView.post {
                     inputMethodManager.hideSoftInputFromWindow(dialogView.windowToken, 0)
                 }
+            }
+
+            fun setDate(date: LocalDate) {
+                dateText = date.format(dateDisplayFormatter)
+                dateError = false
             }
 
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -588,28 +651,95 @@ private fun ExpenseDialog(
                     )
                 }
 
+                if (noteSuggestions.isNotEmpty()) {
+                    item {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("常用备注", style = MaterialTheme.typography.labelMedium)
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                items(noteSuggestions, key = { it.text }) { suggestion ->
+                                    AssistChip(
+                                        onClick = {
+                                            note = suggestion.text
+                                            finishDialogEditing()
+                                        },
+                                        label = { Text("${suggestion.text} · ${suggestion.count}") }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 item {
-                    Text("日期：${selectedDate.format(DateTimeFormatter.ofPattern("yyyy年M月d日"))}")
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        TextButton(onClick = { selectedDate = selectedDate.minusDays(1) }) { Text("−1天") }
-                        TextButton(onClick = { selectedDate = LocalDate.now() }) { Text("今天") }
-                        TextButton(onClick = { selectedDate = selectedDate.plusDays(1) }) { Text("+1天") }
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("日期：")
+                            Column(Modifier.width(128.dp)) {
+                                BasicTextField(
+                                    value = dateText,
+                                    onValueChange = { next ->
+                                        val formatted = formatDateInput(next)
+                                        dateText = formatted
+                                        dateError = formatted.length == 10 && parseDateInput(formatted) == null
+                                    },
+                                    textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    ),
+                                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(
+                                        keyboardType = KeyboardType.Number,
+                                        imeAction = ImeAction.Done
+                                    ),
+                                    keyboardActions = KeyboardActions(
+                                        onDone = {
+                                            dateError = parseDateInput(dateText) == null
+                                            if (!dateError) finishDialogEditing()
+                                        }
+                                    ),
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                                )
+                                HorizontalDivider(
+                                    color = if (dateError) MaterialTheme.colorScheme.error
+                                    else MaterialTheme.colorScheme.outlineVariant
+                                )
+                            }
+                        }
+                        if (dateError) {
+                            Text(
+                                "日期无效，请按 yyyy/mm/dd 输入",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            TextButton(
+                                enabled = parsedDate != null,
+                                onClick = { parsedDate?.let { setDate(it.minusDays(1)) } }
+                            ) { Text("−1天") }
+                            TextButton(onClick = { setDate(LocalDate.now()) }) { Text("今天") }
+                            TextButton(
+                                enabled = parsedDate != null,
+                                onClick = { parsedDate?.let { setDate(it.plusDays(1)) } }
+                            ) { Text("+1天") }
+                        }
                     }
                 }
             }
         },
         confirmButton = {
             TextButton(
-                enabled = calculatedAmount?.let { it > 0.0 } == true,
+                enabled = calculatedAmount?.let { it > 0.0 } == true && parsedDate != null,
                 onClick = {
                     val amount = calculatedAmount?.takeIf { it > 0.0 } ?: return@TextButton
+                    val date = parsedDate ?: return@TextButton
                     onSave(
                         Expense(
                             id = initialExpense?.id ?: UUID.randomUUID().toString(),
                             amount = amount,
                             category = categories[categoryIndex].key,
                             note = note.trim(),
-                            date = selectedDate
+                            date = date
                         )
                     )
                 }
