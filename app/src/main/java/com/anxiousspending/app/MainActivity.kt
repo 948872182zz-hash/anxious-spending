@@ -276,50 +276,150 @@ private fun LedgerPage(
 
 @Composable
 private fun AnalysisPage(expenses: List<Expense>) {
-    var selectedMonth by remember { mutableStateOf(YearMonth.now()) }
-    val monthExpenses = expenses.filter { YearMonth.from(it.date) == selectedMonth }
-    val yearExpenses = expenses.filter { it.date.year == selectedMonth.year }
+    val today = LocalDate.now()
+    var selectedYear by remember { mutableIntStateOf(today.year) }
+    var selectedMonth by remember { mutableIntStateOf(today.monthValue) }
+    var analysisMode by remember { mutableIntStateOf(0) }
+
+    val monthExpenses = expenses.filter {
+        it.date.year == selectedYear && it.date.monthValue == selectedMonth
+    }
+    val yearExpenses = expenses.filter { it.date.year == selectedYear }
+    val activeExpenses = if (analysisMode == 0) monthExpenses else yearExpenses
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                TextButton(onClick = { selectedMonth = selectedMonth.minusMonths(1) }) { Text("‹ 上月") }
-                Text(
-                    selectedMonth.format(DateTimeFormatter.ofPattern("yyyy年 M月")),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                TextButton(onClick = { selectedMonth = selectedMonth.plusMonths(1) }) { Text("下月 ›") }
+            ElevatedCard(Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text("年份", style = MaterialTheme.typography.labelMedium)
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = { selectedYear -= 1 }) { Text("‹") }
+                        Text(
+                            "$selectedYear 年",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        TextButton(onClick = { selectedYear += 1 }) { Text("›") }
+                    }
+                }
             }
         }
+
         item {
-            Text("这个月", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Text("¥%.2f".format(monthExpenses.sumOf { it.amount }), style = MaterialTheme.typography.headlineMedium)
-            Text("${monthExpenses.size} 笔", style = MaterialTheme.typography.bodySmall)
+            ElevatedCard(Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text("月份", style = MaterialTheme.typography.labelMedium)
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = {
+                            selectedMonth = if (selectedMonth == 1) 12 else selectedMonth - 1
+                        }) { Text("‹") }
+                        Text(
+                            "$selectedMonth 月",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        TextButton(onClick = {
+                            selectedMonth = if (selectedMonth == 12) 1 else selectedMonth + 1
+                        }) { Text("›") }
+                    }
+                }
+            }
         }
+
         item {
-            Text("${selectedMonth.year} 年", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Text("¥%.2f".format(yearExpenses.sumOf { it.amount }), style = MaterialTheme.typography.headlineMedium)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (analysisMode == 0) {
+                    Button(onClick = { analysisMode = 0 }, modifier = Modifier.weight(1f)) {
+                        Text("月分析")
+                    }
+                    OutlinedButton(onClick = { analysisMode = 1 }, modifier = Modifier.weight(1f)) {
+                        Text("年分析")
+                    }
+                } else {
+                    OutlinedButton(onClick = { analysisMode = 0 }, modifier = Modifier.weight(1f)) {
+                        Text("月分析")
+                    }
+                    Button(onClick = { analysisMode = 1 }, modifier = Modifier.weight(1f)) {
+                        Text("年分析")
+                    }
+                }
+            }
         }
-        item { Text("分类", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
-        if (monthExpenses.isEmpty()) {
-            item { Text("这个月还没有账。") }
+
+        item {
+            val title = if (analysisMode == 0) "$selectedYear 年 $selectedMonth 月" else "$selectedYear 年"
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text(
+                    "¥%.2f".format(activeExpenses.sumOf { it.amount }),
+                    style = MaterialTheme.typography.headlineMedium
+                )
+                Text("${activeExpenses.size} 笔", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+
+        if (analysisMode == 1) {
+            item {
+                Text("每月", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            }
+            if (yearExpenses.isEmpty()) {
+                item { Text("这一年还没有账。") }
+            } else {
+                items((1..12).toList(), key = { "month-$it" }) { month ->
+                    val list = yearExpenses.filter { it.date.monthValue == month }
+                    if (list.isNotEmpty()) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("${month}月")
+                            Text("¥%.2f".format(list.sumOf { it.amount }))
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            Text("分类", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        }
+
+        if (activeExpenses.isEmpty()) {
+            item {
+                Text(if (analysisMode == 0) "这个月还没有账。" else "这一年还没有账。")
+            }
         } else {
             items(
-                monthExpenses.groupBy { it.category }
+                activeExpenses.groupBy { it.category }
                     .toList()
                     .sortedByDescending { (_, list) -> list.sumOf { it.amount } },
-                key = { it.first }
+                key = { "category-${analysisMode}-${it.first}" }
             ) { (category, list) ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
                     Text(categorySubtitle(category), fontWeight = FontWeight.Medium)
                     Text("¥%.2f".format(list.sumOf { it.amount }))
                 }
@@ -405,10 +505,17 @@ private fun ExpenseDialog(
                     )
                 }
 
-                item { CalculatorPad(onToken = ::appendToken, onClear = { expression = "" }, onBackspace = {
-                    if (expression.isNotEmpty()) expression = expression.dropLast(1)
-                    calculatorError = false
-                }, onEquals = ::calculate) }
+                item {
+                    CalculatorPad(
+                        onToken = ::appendToken,
+                        onClear = { expression = "" },
+                        onBackspace = {
+                            if (expression.isNotEmpty()) expression = expression.dropLast(1)
+                            calculatorError = false
+                        },
+                        onEquals = ::calculate
+                    )
+                }
 
                 item {
                     Box {
