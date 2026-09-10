@@ -75,7 +75,7 @@ data class Expense(
 
 data class CategoryOption(val key: String, val subtitle: String)
 private data class CurrencyOption(val code: String, val name: String, val symbol: String)
-private data class PaymentSourceOption(val key: String, val name: String, val dot: String)
+private data class PaymentSourceOption(val key: String, val name: String, val dot: String, val color: Color)
 private data class NoteSuggestion(
     val category: String,
     val text: String,
@@ -106,9 +106,9 @@ private val currencies = listOf(
 )
 
 private val paymentSources = listOf(
-    PaymentSourceOption("alipay", "支付宝", "🔵"),
-    PaymentSourceOption("wechat", "微信", "🟢"),
-    PaymentSourceOption("other", "其他", "⚪")
+    PaymentSourceOption("alipay", "支付宝", "●", Color(0xFF1677FF)),
+    PaymentSourceOption("wechat", "微信", "●", Color(0xFF07C160)),
+    PaymentSourceOption("other", "其他", "●", Color(0xFF9E9E9E))
 )
 
 private fun categorySubtitle(key: String): String =
@@ -366,17 +366,19 @@ private fun LedgerPage(
                     ) {
                         Column(Modifier.weight(1f)) {
                             Text(categorySubtitle(expense.category), fontWeight = FontWeight.SemiBold)
-                            if (expense.note.isNotBlank()) {
-                                Spacer(Modifier.height(3.dp))
-                                Text(expense.note, style = MaterialTheme.typography.bodySmall)
-                            }
                             Spacer(Modifier.height(3.dp))
                             val source = paymentSourceOption(expense.paymentSource)
-                            Text(
-                                "${source.dot} ${source.name}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (expense.note.isNotBlank()) {
+                                    Text(expense.note, style = MaterialTheme.typography.bodySmall)
+                                    Spacer(Modifier.width(6.dp))
+                                }
+                                Text(
+                                    source.dot,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = source.color
+                                )
+                            }
                         }
                         Column(horizontalAlignment = Alignment.End) {
                             Text(formatOriginal(expense), fontWeight = FontWeight.SemiBold)
@@ -749,15 +751,22 @@ private fun ExpenseDialog(
                             modifier = Modifier.fillMaxWidth().height(40.dp),
                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
                         ) {
-                            Text(
-                                "${selectedPaymentSource.dot} ${selectedPaymentSource.name}",
-                                fontWeight = FontWeight.SemiBold
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(selectedPaymentSource.dot, color = selectedPaymentSource.color)
+                                Spacer(Modifier.width(5.dp))
+                                Text(selectedPaymentSource.name, fontWeight = FontWeight.SemiBold)
+                            }
                         }
                         DropdownMenu(expanded = paymentSourceMenu, onDismissRequest = { paymentSourceMenu = false }) {
                             paymentSources.forEachIndexed { index, source ->
                                 DropdownMenuItem(
-                                    text = { Text("${source.dot}  ${source.name}") },
+                                    text = {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(source.dot, color = source.color)
+                                            Spacer(Modifier.width(7.dp))
+                                            Text(source.name)
+                                        }
+                                    },
                                     onClick = {
                                         paymentSourceIndex = index
                                         paymentSourceMenu = false
