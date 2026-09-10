@@ -70,13 +70,15 @@ data class Expense(
     val currency: String = "CNY",
     val exchangeRateToCny: Double = 1.0,
     val cnyAmount: Double = amount,
-    val paymentSource: String = "alipay"
+    val paymentSource: String = "alipay",
+    val entryType: String = "expense"
 )
 
-data class CategoryOption(val key: String, val subtitle: String)
+data class CategoryOption(val key: String, val name: String, val subtitle: String)
 private data class CurrencyOption(val code: String, val name: String, val symbol: String)
 private data class PaymentSourceOption(val key: String, val name: String, val dot: String, val color: Color)
 private data class NoteSuggestion(
+    val entryType: String,
     val category: String,
     val text: String,
     val count: Int,
@@ -84,18 +86,25 @@ private data class NoteSuggestion(
     val lastUsed: LocalDate
 )
 
-private val categories = listOf(
-    CategoryOption("shopping", "BUY STH NEW"),
-    CategoryOption("food", "EATING"),
-    CategoryOption("game", "婷芷我说婷芷"),
-    CategoryOption("ai", "别BAN我"),
-    CategoryOption("misc", "生活杂费"),
-    CategoryOption("transport", "🚈🚕🚌嘟嘟"),
-    CategoryOption("travel", "GO GO GO出发喽"),
-    CategoryOption("snack", "STOP EAT"),
-    CategoryOption("books", "今天你看书了吗"),
-    CategoryOption("investment", "HOPE💹"),
-    CategoryOption("medical", "今天哪里又痛了我的大小姐")
+private val expenseCategories = listOf(
+    CategoryOption("shopping", "购物", "BUY STH NEW"),
+    CategoryOption("food", "餐饮", "EATING"),
+    CategoryOption("game", "游戏", "婷芷我说婷芷"),
+    CategoryOption("ai", "AI", "别BAN我"),
+    CategoryOption("misc", "杂费", "生活杂费"),
+    CategoryOption("transport", "交通", "🚈🚕🚌嘟嘟"),
+    CategoryOption("travel", "旅游", "GO GO GO出发喽"),
+    CategoryOption("snack", "零食", "STOP EAT"),
+    CategoryOption("books", "书籍", "今天你看书了吗"),
+    CategoryOption("investment", "投资", "HOPE💹"),
+    CategoryOption("medical", "医疗", "今天哪里又痛了我的大小姐")
+)
+
+private val incomeCategories = listOf(
+    CategoryOption("salary", "工资", "钱来"),
+    CategoryOption("red_packet", "红包", "意外收获"),
+    CategoryOption("investment_income", "理财", "HOPE一直💹"),
+    CategoryOption("aa_income", "AA收入", "没有惊喜的一笔钱")
 )
 
 private val currencies = listOf(
@@ -111,8 +120,14 @@ private val paymentSources = listOf(
     PaymentSourceOption("other", "其他", "●", Color(0xFF9E9E9E))
 )
 
-private fun categorySubtitle(key: String): String =
-    categories.firstOrNull { it.key == key }?.subtitle ?: key
+private fun categoriesFor(entryType: String): List<CategoryOption> =
+    if (entryType == "income") incomeCategories else expenseCategories
+
+private fun categoryOption(key: String): CategoryOption? =
+    (expenseCategories + incomeCategories).firstOrNull { it.key == key }
+
+private fun categorySubtitle(key: String): String = categoryOption(key)?.subtitle ?: key
+private fun categoryName(key: String): String = categoryOption(key)?.name ?: key
 
 private fun currencyOption(code: String): CurrencyOption =
     currencies.firstOrNull { it.code == code } ?: currencies.first()
@@ -125,12 +140,13 @@ private fun formatAmount(value: Double): String {
     return fixed.trimEnd('0').trimEnd('.')
 }
 
-private fun formatOriginal(expense: Expense): String {
-    val option = currencyOption(expense.currency)
-    return if (expense.currency == "CNY") {
-        "¥${formatAmount(expense.amount)}"
+private fun formatOriginal(entry: Expense): String {
+    val option = currencyOption(entry.currency)
+    val prefix = if (entry.entryType == "income") "+" else ""
+    return if (entry.currency == "CNY") {
+        "$prefix¥${formatAmount(entry.amount)}"
     } else {
-        "${option.code} ${option.symbol}${formatAmount(expense.amount)}"
+        "$prefix${option.code} ${option.symbol}${formatAmount(entry.amount)}"
     }
 }
 
@@ -145,20 +161,19 @@ private fun formatRateTime(millis: Long): String =
         .format(DateTimeFormatter.ofPattern("M/d HH:mm"))
 
 private fun buildNoteSuggestions(
-    expenses: List<Expense>,
+    entries: List<Expense>,
     clickCounts: Map<String, Int>
 ): List<NoteSuggestion> =
-    expenses
+    entries
         .filter { it.note.trim().isNotEmpty() }
-        .groupBy { it.category to it.note.trim() }
+        .groupBy { Triple(it.entryType, it.category, it.note.trim()) }
         .map { (key, matches) ->
-            val category = key.first
-            val text = key.second
             NoteSuggestion(
-                category = category,
-                text = text,
+                entryType = key.first,
+                category = key.second,
+                text = key.third,
                 count = matches.size,
-                clickCount = clickCounts[NoteTagStore.keyFor(category, text)] ?: 0,
+                clickCount = clickCounts[NoteTagStore.keyFor(key.second, key.third)] ?: 0,
                 lastUsed = matches.maxOf { it.date }
             )
         }
@@ -225,7 +240,7 @@ fun AnxiousSpendingApp(
     noteTagStore: NoteTagStore,
     exchangeRateStore: ExchangeRateStore
 ) {
-    var expenses by remember { mutableStateOf(store.load()) }
+    var entries by remember { mutableStateOf(store.load()) }
     var noteTagClicks by remember { mutableStateOf(noteTagStore.loadClickCounts()) }
     var rateSnapshot by remember { mutableStateOf(exchangeRateStore.load()) }
     var page by remember { mutableIntStateOf(0) }
@@ -234,18 +249,16 @@ fun AnxiousSpendingApp(
     var pendingEdit by remember { mutableStateOf<Expense?>(null) }
 
     LaunchedEffect(Unit) {
-        exchangeRateStore.refreshAsync { fresh ->
-            if (fresh != null) rateSnapshot = fresh
-        }
+        exchangeRateStore.refreshAsync { fresh -> if (fresh != null) rateSnapshot = fresh }
     }
 
-    val noteSuggestions = remember(expenses, noteTagClicks) {
-        buildNoteSuggestions(expenses, noteTagClicks)
+    val noteSuggestions = remember(entries, noteTagClicks) {
+        buildNoteSuggestions(entries, noteTagClicks)
     }
 
     fun persist(next: List<Expense>) {
-        expenses = next.sortedWith(compareByDescending<Expense> { it.date }.thenByDescending { it.id })
-        store.save(expenses)
+        entries = next.sortedWith(compareByDescending<Expense> { it.date }.thenByDescending { it.id })
+        store.save(entries)
     }
 
     fun registerNoteTagClick(category: String, text: String) {
@@ -279,13 +292,13 @@ fun AnxiousSpendingApp(
         },
         floatingActionButton = {
             if (page == 0) FloatingActionButton(onClick = { showAdd = true }) {
-                Icon(Icons.Default.Add, contentDescription = "新增支出")
+                Icon(Icons.Default.Add, contentDescription = "新增记录")
             }
         }
     ) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
-            if (page == 0) LedgerPage(expenses, { pendingEdit = it }, { pendingDelete = it })
-            else AnalysisPage(expenses)
+            if (page == 0) LedgerPage(entries, { pendingEdit = it }, { pendingDelete = it })
+            else AnalysisPage(entries)
         }
     }
 
@@ -296,7 +309,7 @@ fun AnxiousSpendingApp(
             rateSnapshot = rateSnapshot,
             onNoteTagClick = ::registerNoteTagClick,
             onDismiss = { showAdd = false },
-            onSave = { persist(expenses + it); showAdd = false }
+            onSave = { persist(entries + it); showAdd = false }
         )
     }
 
@@ -308,20 +321,20 @@ fun AnxiousSpendingApp(
             onNoteTagClick = ::registerNoteTagClick,
             onDismiss = { pendingEdit = null },
             onSave = { updated ->
-                persist(expenses.map { if (it.id == updated.id) updated else it })
+                persist(entries.map { if (it.id == updated.id) updated else it })
                 pendingEdit = null
             }
         )
     }
 
-    pendingDelete?.let { expense ->
+    pendingDelete?.let { entry ->
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
             title = { Text("删掉这笔？") },
-            text = { Text("${categorySubtitle(expense.category)} · ${formatOriginal(expense)}") },
+            text = { Text("${categorySubtitle(entry.category)} · ${formatOriginal(entry)}") },
             confirmButton = {
                 TextButton(onClick = {
-                    persist(expenses.filterNot { it.id == expense.id })
+                    persist(entries.filterNot { it.id == entry.id })
                     pendingDelete = null
                 }) { Text("删除") }
             },
@@ -332,65 +345,73 @@ fun AnxiousSpendingApp(
 
 @Composable
 private fun LedgerPage(
-    expenses: List<Expense>,
+    entries: List<Expense>,
     onEdit: (Expense) -> Unit,
     onDelete: (Expense) -> Unit
 ) {
-    if (expenses.isEmpty()) {
+    if (entries.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("还没有账。先花一笔再说。")
+            Text("还没有账。先记一笔再说。")
         }
         return
     }
 
-    val grouped = expenses.groupBy { it.date }.toSortedMap(compareByDescending { it })
+    val grouped = entries.groupBy { it.date }.toSortedMap(compareByDescending { it })
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        grouped.forEach { (date, dayExpenses) ->
+        grouped.forEach { (date, dayEntries) ->
             item(key = "day-$date") {
+                val expenseTotal = dayEntries.filter { it.entryType == "expense" }.sumOf { it.cnyAmount }
+                val incomeTotal = dayEntries.filter { it.entryType == "income" }.sumOf { it.cnyAmount }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(date.format(DateTimeFormatter.ofPattern("M月d日 EEE")), fontWeight = FontWeight.Bold)
-                    Text("¥%.2f".format(dayExpenses.sumOf { it.cnyAmount }))
+                    Text(
+                        when {
+                            incomeTotal > 0.0 && expenseTotal > 0.0 -> "支 ¥%.2f · 收 ¥%.2f".format(expenseTotal, incomeTotal)
+                            incomeTotal > 0.0 -> "收 ¥%.2f".format(incomeTotal)
+                            else -> "¥%.2f".format(expenseTotal)
+                        }
+                    )
                 }
             }
 
-            items(dayExpenses, key = { it.id }) { expense ->
+            items(dayEntries, key = { it.id }) { entry ->
                 ElevatedCard(Modifier.fillMaxWidth()) {
                     Row(
-                        Modifier.fillMaxWidth().clickable { onEdit(expense) }
+                        Modifier.fillMaxWidth().clickable { onEdit(entry) }
                             .padding(start = 14.dp, top = 10.dp, bottom = 10.dp, end = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(Modifier.weight(1f)) {
-                            Text(categorySubtitle(expense.category), fontWeight = FontWeight.SemiBold)
+                            Text(categorySubtitle(entry.category), fontWeight = FontWeight.SemiBold)
                             Spacer(Modifier.height(3.dp))
-                            val source = paymentSourceOption(expense.paymentSource)
+                            val source = paymentSourceOption(entry.paymentSource)
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                if (expense.note.isNotBlank()) {
-                                    Text(expense.note, style = MaterialTheme.typography.bodySmall)
+                                if (entry.note.isNotBlank()) {
+                                    Text(entry.note, style = MaterialTheme.typography.bodySmall)
                                     Spacer(Modifier.width(6.dp))
                                 }
-                                Text(
-                                    source.dot,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = source.color
-                                )
+                                Text(source.dot, style = MaterialTheme.typography.bodySmall, color = source.color)
                             }
                         }
                         Column(horizontalAlignment = Alignment.End) {
-                            Text(formatOriginal(expense), fontWeight = FontWeight.SemiBold)
-                            if (expense.currency != "CNY") {
+                            Text(
+                                formatOriginal(entry),
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (entry.entryType == "income") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                            )
+                            if (entry.currency != "CNY") {
                                 Text(
-                                    "≈ ¥${formatAmount(expense.cnyAmount)}",
+                                    "≈ ${if (entry.entryType == "income") "+" else ""}¥${formatAmount(entry.cnyAmount)}",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
-                        IconButton(onClick = { onDelete(expense) }) {
+                        IconButton(onClick = { onDelete(entry) }) {
                             Icon(Icons.Default.Delete, contentDescription = "删除这笔")
                         }
                     }
@@ -401,7 +422,8 @@ private fun LedgerPage(
 }
 
 @Composable
-private fun AnalysisPage(expenses: List<Expense>) {
+private fun AnalysisPage(entries: List<Expense>) {
+    val expenses = entries.filter { it.entryType == "expense" }
     val today = LocalDate.now()
     var selectedYear by remember { mutableIntStateOf(today.year) }
     var selectedMonth by remember { mutableIntStateOf(today.monthValue) }
@@ -460,7 +482,7 @@ private fun AnalysisPage(expenses: List<Expense>) {
 
         if (analysisMode == 1) {
             item { Text("每月", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
-            if (nonEmptyMonths.isEmpty()) item { Text("这一年还没有账。") }
+            if (nonEmptyMonths.isEmpty()) item { Text("这一年还没有支出。") }
             else items(nonEmptyMonths, key = { it.first }) { (month, total) ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("${month}月")
@@ -471,7 +493,7 @@ private fun AnalysisPage(expenses: List<Expense>) {
 
         item { Text("分类", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
         if (activeExpenses.isEmpty()) {
-            item { Text(if (analysisMode == 0) "这个月还没有账。" else "这一年还没有账。") }
+            item { Text(if (analysisMode == 0) "这个月还没有支出。" else "这一年还没有支出。") }
         } else {
             items(
                 activeExpenses.groupBy { it.category }.toList()
@@ -516,8 +538,7 @@ private fun CompactDateField(
 ) {
     val shape = RoundedCornerShape(8.dp)
     Box(
-        modifier = Modifier.width(width.dp).height(34.dp)
-            .border(1.dp, MaterialTheme.colorScheme.outline, shape),
+        modifier = Modifier.width(width.dp).height(34.dp).border(1.dp, MaterialTheme.colorScheme.outline, shape),
         contentAlignment = Alignment.Center
     ) {
         BasicTextField(
@@ -546,32 +567,30 @@ private fun ExpenseDialog(
     onDismiss: () -> Unit,
     onSave: (Expense) -> Unit
 ) {
+    var entryType by remember(initialExpense?.id) { mutableStateOf(initialExpense?.entryType ?: "expense") }
     var expression by remember(initialExpense?.id) {
         mutableStateOf(initialExpense?.let { formatAmount(it.amount) }.orEmpty())
     }
     var note by remember(initialExpense?.id) { mutableStateOf(initialExpense?.note.orEmpty()) }
-    var categoryIndex by remember(initialExpense?.id) {
+    var categoryIndex by remember(initialExpense?.id, entryType) {
         mutableIntStateOf(
-            if (initialExpense == null) -1
-            else categories.indexOfFirst { it.key == initialExpense.category }.takeIf { it >= 0 } ?: -1
+            if (initialExpense == null || initialExpense.entryType != entryType) -1
+            else categoriesFor(entryType).indexOfFirst { it.key == initialExpense.category }.takeIf { it >= 0 } ?: -1
         )
     }
     var categoryMenu by remember { mutableStateOf(false) }
     var categoryError by remember(initialExpense?.id) { mutableStateOf(false) }
     var currencyIndex by remember(initialExpense?.id) {
-        mutableIntStateOf(
-            currencies.indexOfFirst { it.code == initialExpense?.currency }.takeIf { it >= 0 } ?: 0
-        )
+        mutableIntStateOf(currencies.indexOfFirst { it.code == initialExpense?.currency }.takeIf { it >= 0 } ?: 0)
     }
     var currencyMenu by remember { mutableStateOf(false) }
     var currencyChanged by remember(initialExpense?.id) { mutableStateOf(false) }
     var paymentSourceIndex by remember(initialExpense?.id) {
-        mutableIntStateOf(
-            paymentSources.indexOfFirst { it.key == initialExpense?.paymentSource }.takeIf { it >= 0 } ?: 0
-        )
+        mutableIntStateOf(paymentSources.indexOfFirst { it.key == initialExpense?.paymentSource }.takeIf { it >= 0 } ?: 0)
     }
     var paymentSourceMenu by remember { mutableStateOf(false) }
 
+    val activeCategories = categoriesFor(entryType)
     val startingDate = initialExpense?.date ?: LocalDate.now()
     var dateYear by remember(initialExpense?.id) { mutableStateOf(startingDate.year.toString()) }
     var dateMonth by remember(initialExpense?.id) { mutableStateOf(startingDate.monthValue.toString().padStart(2, '0')) }
@@ -608,10 +627,19 @@ private fun ExpenseDialog(
         dateError = false
     }
 
+    fun selectEntryType(next: String) {
+        if (entryType != next) {
+            entryType = next
+            categoryIndex = -1
+            categoryError = false
+            categoryMenu = false
+        }
+    }
+
     val calculatedAmount = evaluateExpression(expression) ?: expression.toDoubleOrNull()
     val parsedDate = parseDateParts(dateYear, dateMonth, dateDay)
-    val hasCategory = categoryIndex in categories.indices
-    val selectedCategoryKey = categories.getOrNull(categoryIndex)?.key
+    val hasCategory = categoryIndex in activeCategories.indices
+    val selectedCategoryKey = activeCategories.getOrNull(categoryIndex)?.key
     val selectedCurrency = currencies[currencyIndex]
     val selectedPaymentSource = paymentSources[paymentSourceIndex]
     val currentRate = when {
@@ -620,9 +648,9 @@ private fun ExpenseDialog(
         else -> rateSnapshot?.rateToCny(selectedCurrency.code)
     }
     val convertedCny = if (calculatedAmount != null && currentRate != null) calculatedAmount * currentRate else null
-    val visibleSuggestions = remember(noteSuggestions, selectedCategoryKey) {
+    val visibleSuggestions = remember(noteSuggestions, selectedCategoryKey, entryType) {
         if (selectedCategoryKey == null) emptyList()
-        else noteSuggestions.filter { it.category == selectedCategoryKey }
+        else noteSuggestions.filter { it.entryType == entryType && it.category == selectedCategoryKey }
     }
 
     AlertDialog(
@@ -648,6 +676,18 @@ private fun ExpenseDialog(
 
             LazyColumn(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 item {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (entryType == "expense") {
+                            Button(onClick = { selectEntryType("expense") }, modifier = Modifier.weight(1f).height(38.dp)) { Text("支出") }
+                            OutlinedButton(onClick = { selectEntryType("income") }, modifier = Modifier.weight(1f).height(38.dp)) { Text("收入") }
+                        } else {
+                            OutlinedButton(onClick = { selectEntryType("expense") }, modifier = Modifier.weight(1f).height(38.dp)) { Text("支出") }
+                            Button(onClick = { selectEntryType("income") }, modifier = Modifier.weight(1f).height(38.dp)) { Text("收入") }
+                        }
+                    }
+                }
+
+                item {
                     OutlinedTextField(
                         value = expression,
                         onValueChange = { next ->
@@ -658,10 +698,7 @@ private fun ExpenseDialog(
                         label = { Text("金额 / 算式") },
                         trailingIcon = {
                             Box {
-                                TextButton(
-                                    onClick = { currencyMenu = true },
-                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
-                                ) {
+                                TextButton(onClick = { currencyMenu = true }, contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)) {
                                     Text("${selectedCurrency.symbol} ${selectedCurrency.code}", fontWeight = FontWeight.Bold)
                                 }
                                 DropdownMenu(expanded = currencyMenu, onDismissRequest = { currencyMenu = false }) {
@@ -721,14 +758,19 @@ private fun ExpenseDialog(
                                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
                             ) {
                                 Text(
-                                    if (hasCategory) categories[categoryIndex].subtitle else "请选择分类 *",
+                                    if (hasCategory) activeCategories[categoryIndex].subtitle else "请选择${if (entryType == "income") "收入" else "支出"}分类 *",
                                     fontWeight = if (hasCategory) FontWeight.SemiBold else FontWeight.Normal
                                 )
                             }
                             DropdownMenu(expanded = categoryMenu, onDismissRequest = { categoryMenu = false }) {
-                                categories.forEachIndexed { index, item ->
+                                activeCategories.forEachIndexed { index, item ->
                                     DropdownMenuItem(
-                                        text = { Text(item.subtitle, fontWeight = FontWeight.Medium) },
+                                        text = {
+                                            Column {
+                                                Text(item.subtitle, fontWeight = FontWeight.Medium)
+                                                Text(item.name, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            }
+                                        },
                                         onClick = {
                                             categoryIndex = index
                                             categoryError = false
@@ -782,9 +824,7 @@ private fun ExpenseDialog(
                         value = note,
                         onValueChange = { note = it },
                         label = { Text("备注") },
-                        trailingIcon = {
-                            IconButton(onClick = { finishEditing() }) { Text("✓", fontWeight = FontWeight.Bold) }
-                        },
+                        trailingIcon = { IconButton(onClick = { finishEditing() }) { Text("✓", fontWeight = FontWeight.Bold) } },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Done),
                         keyboardActions = KeyboardActions(onDone = { finishEditing() }),
                         singleLine = true,
@@ -805,22 +845,14 @@ private fun ExpenseDialog(
                         Text("常用备注", style = MaterialTheme.typography.labelSmall)
                         Spacer(Modifier.width(6.dp))
                         when {
-                            selectedCategoryKey == null -> Text(
-                                "先选分类",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            visibleSuggestions.isEmpty() -> Text(
-                                "暂无",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            selectedCategoryKey == null -> Text("先选分类", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            visibleSuggestions.isEmpty() -> Text("暂无", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             else -> LazyRow(
                                 modifier = Modifier.weight(1f),
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                                 contentPadding = PaddingValues(end = 8.dp)
                             ) {
-                                items(visibleSuggestions, key = { "${it.category}-${it.text}" }) { suggestion ->
+                                items(visibleSuggestions, key = { "${it.entryType}-${it.category}-${it.text}" }) { suggestion ->
                                     AssistChip(
                                         onClick = {
                                             note = suggestion.text
@@ -837,10 +869,7 @@ private fun ExpenseDialog(
 
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Text("日期：", style = MaterialTheme.typography.bodyMedium)
                             CompactDateField(
                                 value = dateYear,
@@ -924,13 +953,14 @@ private fun ExpenseDialog(
                         Expense(
                             id = initialExpense?.id ?: UUID.randomUUID().toString(),
                             amount = amount,
-                            category = categories[categoryIndex].key,
+                            category = activeCategories[categoryIndex].key,
                             note = note.trim(),
                             date = date,
                             currency = selectedCurrency.code,
                             exchangeRateToCny = rate,
                             cnyAmount = amount * rate,
-                            paymentSource = selectedPaymentSource.key
+                            paymentSource = selectedPaymentSource.key,
+                            entryType = entryType
                         )
                     )
                 }
