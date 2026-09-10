@@ -69,11 +69,13 @@ data class Expense(
     val date: LocalDate,
     val currency: String = "CNY",
     val exchangeRateToCny: Double = 1.0,
-    val cnyAmount: Double = amount
+    val cnyAmount: Double = amount,
+    val paymentSource: String = "alipay"
 )
 
 data class CategoryOption(val key: String, val subtitle: String)
 private data class CurrencyOption(val code: String, val name: String, val symbol: String)
+private data class PaymentSourceOption(val key: String, val name: String, val dot: String)
 private data class NoteSuggestion(
     val category: String,
     val text: String,
@@ -103,11 +105,20 @@ private val currencies = listOf(
     CurrencyOption("JPY", "日元", "¥")
 )
 
+private val paymentSources = listOf(
+    PaymentSourceOption("alipay", "支付宝", "🔵"),
+    PaymentSourceOption("wechat", "微信", "🟢"),
+    PaymentSourceOption("other", "其他", "⚪")
+)
+
 private fun categorySubtitle(key: String): String =
     categories.firstOrNull { it.key == key }?.subtitle ?: key
 
 private fun currencyOption(code: String): CurrencyOption =
     currencies.firstOrNull { it.code == code } ?: currencies.first()
+
+private fun paymentSourceOption(key: String): PaymentSourceOption =
+    paymentSources.firstOrNull { it.key == key } ?: paymentSources.last()
 
 private fun formatAmount(value: Double): String {
     val fixed = "%.2f".format(value)
@@ -359,6 +370,13 @@ private fun LedgerPage(
                                 Spacer(Modifier.height(3.dp))
                                 Text(expense.note, style = MaterialTheme.typography.bodySmall)
                             }
+                            Spacer(Modifier.height(3.dp))
+                            val source = paymentSourceOption(expense.paymentSource)
+                            Text(
+                                "${source.dot} ${source.name}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                         Column(horizontalAlignment = Alignment.End) {
                             Text(formatOriginal(expense), fontWeight = FontWeight.SemiBold)
@@ -545,6 +563,12 @@ private fun ExpenseDialog(
     }
     var currencyMenu by remember { mutableStateOf(false) }
     var currencyChanged by remember(initialExpense?.id) { mutableStateOf(false) }
+    var paymentSourceIndex by remember(initialExpense?.id) {
+        mutableIntStateOf(
+            paymentSources.indexOfFirst { it.key == initialExpense?.paymentSource }.takeIf { it >= 0 } ?: 0
+        )
+    }
+    var paymentSourceMenu by remember { mutableStateOf(false) }
 
     val startingDate = initialExpense?.date ?: LocalDate.now()
     var dateYear by remember(initialExpense?.id) { mutableStateOf(startingDate.year.toString()) }
@@ -587,6 +611,7 @@ private fun ExpenseDialog(
     val hasCategory = categoryIndex in categories.indices
     val selectedCategoryKey = categories.getOrNull(categoryIndex)?.key
     val selectedCurrency = currencies[currencyIndex]
+    val selectedPaymentSource = paymentSources[paymentSourceIndex]
     val currentRate = when {
         selectedCurrency.code == "CNY" -> 1.0
         !currencyChanged && initialExpense?.currency == selectedCurrency.code -> initialExpense.exchangeRateToCny
@@ -713,6 +738,32 @@ private fun ExpenseDialog(
                         }
                         if (categoryError) {
                             Text("请选择分类", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+
+                item {
+                    Box {
+                        OutlinedButton(
+                            onClick = { paymentSourceMenu = true },
+                            modifier = Modifier.fillMaxWidth().height(40.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
+                        ) {
+                            Text(
+                                "${selectedPaymentSource.dot} ${selectedPaymentSource.name}",
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                        DropdownMenu(expanded = paymentSourceMenu, onDismissRequest = { paymentSourceMenu = false }) {
+                            paymentSources.forEachIndexed { index, source ->
+                                DropdownMenuItem(
+                                    text = { Text("${source.dot}  ${source.name}") },
+                                    onClick = {
+                                        paymentSourceIndex = index
+                                        paymentSourceMenu = false
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -869,7 +920,8 @@ private fun ExpenseDialog(
                             date = date,
                             currency = selectedCurrency.code,
                             exchangeRateToCny = rate,
-                            cnyAmount = amount * rate
+                            cnyAmount = amount * rate,
+                            paymentSource = selectedPaymentSource.key
                         )
                     )
                 }
