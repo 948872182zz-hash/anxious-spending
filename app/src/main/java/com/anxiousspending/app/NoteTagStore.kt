@@ -20,20 +20,23 @@ class NoteTagStore(context: Context) {
         }.getOrDefault(emptyMap())
     }
 
-    fun incrementClick(text: String): Map<String, Int> {
-        val normalized = text.trim()
-        if (normalized.isEmpty()) return loadClickCounts()
+    fun incrementClick(category: String, text: String): Map<String, Int> {
+        val normalizedCategory = category.trim()
+        val normalizedText = text.trim()
+        if (normalizedCategory.isEmpty() || normalizedText.isEmpty()) return loadClickCounts()
 
+        val key = keyFor(normalizedCategory, normalizedText)
         val next = loadClickCounts().toMutableMap()
-        next[normalized] = (next[normalized] ?: 0) + 1
+        next[key] = (next[key] ?: 0) + 1
 
         val obj = JSONObject()
-        next.forEach { (key, value) -> obj.put(key, value) }
+        next.forEach { (savedKey, value) -> obj.put(savedKey, value) }
         prefs.edit().putString(KEY_CLICKS, obj.toString()).apply()
         return next.toMap()
     }
 
-    private companion object {
-        const val KEY_CLICKS = "note_tag_click_counts"
+    companion object {
+        fun keyFor(category: String, text: String): String = "${category.trim()}\u001F${text.trim()}"
+        private const val KEY_CLICKS = "note_tag_click_counts"
     }
 }
