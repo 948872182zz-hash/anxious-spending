@@ -41,7 +41,9 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 
@@ -50,9 +52,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val expenseStore = ExpenseStore(this)
         val noteTagStore = NoteTagStore(this)
+        val exchangeRateStore = ExchangeRateStore(this)
         setContent {
             MaterialTheme {
-                AnxiousSpendingApp(expenseStore, noteTagStore)
+                AnxiousSpendingApp(expenseStore, noteTagStore, exchangeRateStore)
             }
         }
     }
@@ -63,11 +66,14 @@ data class Expense(
     val amount: Double,
     val category: String,
     val note: String,
-    val date: LocalDate
+    val date: LocalDate,
+    val currency: String = "CNY",
+    val exchangeRateToCny: Double = 1.0,
+    val cnyAmount: Double = amount
 )
 
 data class CategoryOption(val key: String, val subtitle: String)
-
+private data class CurrencyOption(val code: String, val name: String, val symbol: String)
 private data class NoteSuggestion(
     val category: String,
     val text: String,
@@ -90,18 +96,42 @@ private val categories = listOf(
     CategoryOption("medical", "今天哪里又痛了我的大小姐")
 )
 
+private val currencies = listOf(
+    CurrencyOption("CNY", "人民币", "¥"),
+    CurrencyOption("USD", "美元", "$"),
+    CurrencyOption("KRW", "韩元", "₩"),
+    CurrencyOption("JPY", "日元", "¥")
+)
+
 private fun categorySubtitle(key: String): String =
     categories.firstOrNull { it.key == key }?.subtitle ?: key
+
+private fun currencyOption(code: String): CurrencyOption =
+    currencies.firstOrNull { it.code == code } ?: currencies.first()
 
 private fun formatAmount(value: Double): String {
     val fixed = "%.2f".format(value)
     return fixed.trimEnd('0').trimEnd('.')
 }
 
+private fun formatOriginal(expense: Expense): String {
+    val option = currencyOption(expense.currency)
+    return if (expense.currency == "CNY") {
+        "¥${formatAmount(expense.amount)}"
+    } else {
+        "${option.code} ${option.symbol}${formatAmount(expense.amount)}"
+    }
+}
+
 private fun parseDateParts(year: String, month: String, day: String): LocalDate? {
     if (year.length != 4 || month.isBlank() || day.isBlank()) return null
     return runCatching { LocalDate.of(year.toInt(), month.toInt(), day.toInt()) }.getOrNull()
 }
+
+private fun formatRateTime(millis: Long): String =
+    Instant.ofEpochMilli(millis)
+        .atZone(ZoneId.systemDefault())
+        .format(DateTimeFormatter.ofPattern("M/d HH:mm"))
 
 private fun buildNoteSuggestions(
     expenses: List<Expense>,
@@ -179,20 +209,34 @@ private fun evaluateExpression(raw: String): Double? {
 }
 
 @Composable
-fun AnxiousSpendingApp(store: ExpenseStore, noteTagStore: NoteTagStore) {
+fun AnxiousSpendingApp(
+    store: ExpenseStore,
+    noteTagStore: NoteTagStore,
+    exchangeRateStore: ExchangeRateStore
+) {
     var expenses by remember { mutableStateOf(store.load()) }
     var noteTagClicks by remember { mutableStateOf(noteTagStore.loadClickCounts()) }
+    var rateSnapshot by remember { mutableStateOf(exchangeRateStore.load()) }
     var page by remember { mutableIntStateOf(0) }
     var showAdd by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<Expense?>(null) }
     var pendingEdit by remember { mutableStateOf<Expense?>(null) }
 
-    val noteSuggestions = remember(expenses, noteTagClicks) { buildNoteSuggestions(expenses, noteTagClicks) }
+    LaunchedEffect(Unit) {
+        exchangeRateStore.refreshAsync { fresh ->
+            if (fresh != null) rateSnapshot = fresh
+        }
+    }
+
+    val noteSuggestions = remember(expenses, noteTagClicks) {
+        buildNoteSuggestions(expenses, noteTagClicks)
+    }
 
     fun persist(next: List<Expense>) {
         expenses = next.sortedWith(compareByDescending<Expense> { it.date }.thenByDescending { it.id })
         store.save(expenses)
     }
+
     fun registerNoteTagClick(category: String, text: String) {
         noteTagClicks = noteTagStore.incrementClick(category, text)
     }
@@ -238,6 +282,7 @@ fun AnxiousSpendingApp(store: ExpenseStore, noteTagStore: NoteTagStore) {
         ExpenseDialog(
             initialExpense = null,
             noteSuggestions = noteSuggestions,
+            rateSnapshot = rateSnapshot,
             onNoteTagClick = ::registerNoteTagClick,
             onDismiss = { showAdd = false },
             onSave = { persist(expenses + it); showAdd = false }
@@ -248,6 +293,7 @@ fun AnxiousSpendingApp(store: ExpenseStore, noteTagStore: NoteTagStore) {
         ExpenseDialog(
             initialExpense = editing,
             noteSuggestions = noteSuggestions,
+            rateSnapshot = rateSnapshot,
             onNoteTagClick = ::registerNoteTagClick,
             onDismiss = { pendingEdit = null },
             onSave = { updated ->
@@ -261,7 +307,7 @@ fun AnxiousSpendingApp(store: ExpenseStore, noteTagStore: NoteTagStore) {
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
             title = { Text("删掉这笔？") },
-            text = { Text("${categorySubtitle(expense.category)} · ¥%.2f".format(expense.amount)) },
+            text = { Text("${categorySubtitle(expense.category)} · ${formatOriginal(expense)}") },
             confirmButton = {
                 TextButton(onClick = {
                     persist(expenses.filterNot { it.id == expense.id })
@@ -274,11 +320,18 @@ fun AnxiousSpendingApp(store: ExpenseStore, noteTagStore: NoteTagStore) {
 }
 
 @Composable
-private fun LedgerPage(expenses: List<Expense>, onEdit: (Expense) -> Unit, onDelete: (Expense) -> Unit) {
+private fun LedgerPage(
+    expenses: List<Expense>,
+    onEdit: (Expense) -> Unit,
+    onDelete: (Expense) -> Unit
+) {
     if (expenses.isEmpty()) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("还没有账。先花一笔再说。") }
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("还没有账。先花一笔再说。")
+        }
         return
     }
+
     val grouped = expenses.groupBy { it.date }.toSortedMap(compareByDescending { it })
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -289,24 +342,34 @@ private fun LedgerPage(expenses: List<Expense>, onEdit: (Expense) -> Unit, onDel
             item(key = "day-$date") {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(date.format(DateTimeFormatter.ofPattern("M月d日 EEE")), fontWeight = FontWeight.Bold)
-                    Text("¥%.2f".format(dayExpenses.sumOf { it.amount }))
+                    Text("¥%.2f".format(dayExpenses.sumOf { it.cnyAmount }))
                 }
             }
+
             items(dayExpenses, key = { it.id }) { expense ->
                 ElevatedCard(Modifier.fillMaxWidth()) {
                     Row(
                         Modifier.fillMaxWidth().clickable { onEdit(expense) }
-                            .padding(start = 14.dp, top = 12.dp, bottom = 12.dp, end = 6.dp),
+                            .padding(start = 14.dp, top = 10.dp, bottom = 10.dp, end = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(Modifier.weight(1f)) {
                             Text(categorySubtitle(expense.category), fontWeight = FontWeight.SemiBold)
                             if (expense.note.isNotBlank()) {
-                                Spacer(Modifier.height(4.dp))
+                                Spacer(Modifier.height(3.dp))
                                 Text(expense.note, style = MaterialTheme.typography.bodySmall)
                             }
                         }
-                        Text("¥%.2f".format(expense.amount), fontWeight = FontWeight.SemiBold)
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(formatOriginal(expense), fontWeight = FontWeight.SemiBold)
+                            if (expense.currency != "CNY") {
+                                Text(
+                                    "≈ ¥${formatAmount(expense.cnyAmount)}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                         IconButton(onClick = { onDelete(expense) }) {
                             Icon(Icons.Default.Delete, contentDescription = "删除这笔")
                         }
@@ -328,7 +391,7 @@ private fun AnalysisPage(expenses: List<Expense>) {
     val activeExpenses = if (analysisMode == 0) monthExpenses else yearExpenses
     val nonEmptyMonths = (1..12).mapNotNull { month ->
         val list = yearExpenses.filter { it.date.monthValue == month }
-        if (list.isEmpty()) null else month to list.sumOf { it.amount }
+        if (list.isEmpty()) null else month to list.sumOf { it.cnyAmount }
     }
 
     LazyColumn(
@@ -353,6 +416,7 @@ private fun AnalysisPage(expenses: List<Expense>) {
                 }
             }
         }
+
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (analysisMode == 0) {
@@ -364,33 +428,40 @@ private fun AnalysisPage(expenses: List<Expense>) {
                 }
             }
         }
+
         item {
             val title = if (analysisMode == 0) "$selectedYear 年 $selectedMonth 月支出" else "$selectedYear 年支出"
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text("¥%.2f".format(activeExpenses.sumOf { it.amount }), style = MaterialTheme.typography.headlineMedium)
-                Text("${activeExpenses.size} 笔", style = MaterialTheme.typography.bodySmall)
+                Text("¥%.2f".format(activeExpenses.sumOf { it.cnyAmount }), style = MaterialTheme.typography.headlineMedium)
+                Text("${activeExpenses.size} 笔 · 统一按记账时人民币金额统计", style = MaterialTheme.typography.bodySmall)
             }
         }
+
         if (analysisMode == 1) {
             item { Text("每月", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
             if (nonEmptyMonths.isEmpty()) item { Text("这一年还没有账。") }
             else items(nonEmptyMonths, key = { it.first }) { (month, total) ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("${month}月"); Text("¥%.2f".format(total))
+                    Text("${month}月")
+                    Text("¥%.2f".format(total))
                 }
             }
         }
+
         item { Text("分类", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
-        if (activeExpenses.isEmpty()) item { Text(if (analysisMode == 0) "这个月还没有账。" else "这一年还没有账。") }
-        else items(
-            activeExpenses.groupBy { it.category }.toList()
-                .sortedByDescending { (_, list) -> list.sumOf { it.amount } },
-            key = { "category-${analysisMode}-${it.first}" }
-        ) { (category, list) ->
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(categorySubtitle(category), fontWeight = FontWeight.Medium)
-                Text("¥%.2f".format(list.sumOf { it.amount }))
+        if (activeExpenses.isEmpty()) {
+            item { Text(if (analysisMode == 0) "这个月还没有账。" else "这一年还没有账。") }
+        } else {
+            items(
+                activeExpenses.groupBy { it.category }.toList()
+                    .sortedByDescending { (_, list) -> list.sumOf { it.cnyAmount } },
+                key = { "category-${analysisMode}-${it.first}" }
+            ) { (category, list) ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(categorySubtitle(category), fontWeight = FontWeight.Medium)
+                    Text("¥%.2f".format(list.sumOf { it.cnyAmount }))
+                }
             }
         }
     }
@@ -450,6 +521,7 @@ private fun CompactDateField(
 private fun ExpenseDialog(
     initialExpense: Expense?,
     noteSuggestions: List<NoteSuggestion>,
+    rateSnapshot: ExchangeRateSnapshot?,
     onNoteTagClick: (String, String) -> Unit,
     onDismiss: () -> Unit,
     onSave: (Expense) -> Unit
@@ -466,6 +538,14 @@ private fun ExpenseDialog(
     }
     var categoryMenu by remember { mutableStateOf(false) }
     var categoryError by remember(initialExpense?.id) { mutableStateOf(false) }
+    var currencyIndex by remember(initialExpense?.id) {
+        mutableIntStateOf(
+            currencies.indexOfFirst { it.code == initialExpense?.currency }.takeIf { it >= 0 } ?: 0
+        )
+    }
+    var currencyMenu by remember { mutableStateOf(false) }
+    var currencyChanged by remember(initialExpense?.id) { mutableStateOf(false) }
+
     val startingDate = initialExpense?.date ?: LocalDate.now()
     var dateYear by remember(initialExpense?.id) { mutableStateOf(startingDate.year.toString()) }
     var dateMonth by remember(initialExpense?.id) { mutableStateOf(startingDate.monthValue.toString().padStart(2, '0')) }
@@ -489,7 +569,10 @@ private fun ExpenseDialog(
     fun calculate() {
         val result = evaluateExpression(expression)
         if (result == null || result <= 0.0) calculatorError = true
-        else { expression = formatAmount(result); calculatorError = false }
+        else {
+            expression = formatAmount(result)
+            calculatorError = false
+        }
     }
 
     fun setDateParts(date: LocalDate) {
@@ -503,6 +586,13 @@ private fun ExpenseDialog(
     val parsedDate = parseDateParts(dateYear, dateMonth, dateDay)
     val hasCategory = categoryIndex in categories.indices
     val selectedCategoryKey = categories.getOrNull(categoryIndex)?.key
+    val selectedCurrency = currencies[currencyIndex]
+    val currentRate = when {
+        selectedCurrency.code == "CNY" -> 1.0
+        !currencyChanged && initialExpense?.currency == selectedCurrency.code -> initialExpense.exchangeRateToCny
+        else -> rateSnapshot?.rateToCny(selectedCurrency.code)
+    }
+    val convertedCny = if (calculatedAmount != null && currentRate != null) calculatedAmount * currentRate else null
     val visibleSuggestions = remember(noteSuggestions, selectedCategoryKey) {
         if (selectedCategoryKey == null) emptyList()
         else noteSuggestions.filter { it.category == selectedCategoryKey }
@@ -518,6 +608,7 @@ private fun ExpenseDialog(
             val inputMethodManager = remember(dialogView) {
                 dialogView.context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
             }
+
             fun finishEditing() {
                 focusManager.clearFocus(force = true)
                 keyboardController?.hide()
@@ -538,10 +629,41 @@ private fun ExpenseDialog(
                             calculatorError = false
                         },
                         label = { Text("金额 / 算式") },
+                        trailingIcon = {
+                            Box {
+                                TextButton(
+                                    onClick = { currencyMenu = true },
+                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+                                ) {
+                                    Text("${selectedCurrency.symbol} ${selectedCurrency.code}", fontWeight = FontWeight.Bold)
+                                }
+                                DropdownMenu(expanded = currencyMenu, onDismissRequest = { currencyMenu = false }) {
+                                    currencies.forEachIndexed { index, option ->
+                                        DropdownMenuItem(
+                                            text = { Text("${option.symbol}  ${option.name}  ${option.code}") },
+                                            onClick = {
+                                                currencyIndex = index
+                                                currencyChanged = true
+                                                currencyMenu = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        },
                         supportingText = {
                             when {
                                 calculatorError -> Text("这个算式算不出来")
-                                calculatedAmount != null && expression.any { it in "+-×÷" } -> Text("= ¥${formatAmount(calculatedAmount)}")
+                                selectedCurrency.code != "CNY" && currentRate == null -> Text("暂无可用汇率，联网后自动刷新")
+                                selectedCurrency.code != "CNY" && convertedCny != null -> {
+                                    val sourceText = if (!currencyChanged && initialExpense?.currency == selectedCurrency.code) {
+                                        "使用这笔账原汇率"
+                                    } else {
+                                        rateSnapshot?.let { "汇率更新 ${formatRateTime(it.updatedAtMillis)}" } ?: "缓存汇率"
+                                    }
+                                    Text("≈ ¥${formatAmount(convertedCny)} · $sourceText")
+                                }
+                                calculatedAmount != null && expression.any { it in "+-×÷" } -> Text("= ${selectedCurrency.symbol}${formatAmount(calculatedAmount)}")
                             }
                         },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
@@ -608,7 +730,8 @@ private fun ExpenseDialog(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth().onPreviewKeyEvent { event ->
                             if (event.type == KeyEventType.KeyDown && event.key == Key.Enter) {
-                                finishEditing(); true
+                                finishEditing()
+                                true
                             } else false
                         }
                     )
@@ -691,16 +814,21 @@ private fun ExpenseDialog(
                             Spacer(Modifier.width(2.dp))
                             Box(
                                 modifier = Modifier.size(26.dp).clickable {
-                                    dateYear = ""; dateMonth = ""; dateDay = ""; dateError = false
+                                    dateYear = ""
+                                    dateMonth = ""
+                                    dateDay = ""
+                                    dateError = false
                                 },
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text("×", color = Color.Black, fontWeight = FontWeight.Black)
                             }
                         }
+
                         if (dateError || ((dateYear.isNotBlank() || dateMonth.isNotBlank() || dateDay.isNotBlank()) && parsedDate == null)) {
                             Text("日期无效", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
                         }
+
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             TextButton(
                                 enabled = parsedDate != null,
@@ -723,7 +851,7 @@ private fun ExpenseDialog(
         },
         confirmButton = {
             TextButton(
-                enabled = calculatedAmount?.let { it > 0.0 } == true && parsedDate != null,
+                enabled = calculatedAmount?.let { it > 0.0 } == true && parsedDate != null && currentRate != null,
                 onClick = {
                     if (!hasCategory) {
                         categoryError = true
@@ -731,13 +859,17 @@ private fun ExpenseDialog(
                     }
                     val amount = calculatedAmount?.takeIf { it > 0.0 } ?: return@TextButton
                     val date = parsedDate ?: return@TextButton
+                    val rate = currentRate ?: return@TextButton
                     onSave(
                         Expense(
                             id = initialExpense?.id ?: UUID.randomUUID().toString(),
                             amount = amount,
                             category = categories[categoryIndex].key,
                             note = note.trim(),
-                            date = date
+                            date = date,
+                            currency = selectedCurrency.code,
+                            exchangeRateToCny = rate,
+                            cnyAmount = amount * rate
                         )
                     )
                 }
@@ -778,7 +910,9 @@ private fun CalculatorPad(
                         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                         color = MaterialTheme.colorScheme.surface
                     ) {
-                        Box(contentAlignment = Alignment.Center) { Text(label, color = MaterialTheme.colorScheme.primary) }
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(label, color = MaterialTheme.colorScheme.primary)
+                        }
                     }
                 }
                 repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
