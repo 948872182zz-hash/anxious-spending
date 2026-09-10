@@ -1,0 +1,82 @@
+name: Refine analytics category chart once
+
+on:
+  push:
+    paths:
+      - '.github/workflows/patch-analytics-a-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Make second-layer A a categorical line chart
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('app/src/main/java/com/anxiousspending/app/AnalyticsHub.kt')
+          text = path.read_text()
+          old = '                    else AmountBarList(noteTotals) { onNoteDetail(it.key) }'
+          new = '                    else CategoricalNoteLineChart(noteTotals, onNoteDetail)'
+          if old not in text:
+              raise SystemExit('Expected note chart call not found')
+          text = text.replace(old, new, 1)
+          marker = '@Composable\nprivate fun CategorySecondLayer('
+          if marker not in text:
+              raise SystemExit('CategorySecondLayer marker not found')
+          function = r'''@Composable
+private fun CategoricalNoteLineChart(items: List<AmountItem>, onNoteClick: (String) -> Unit) {
+    if (items.isEmpty()) return
+    val maxValue = items.maxOf { it.amount }.takeIf { it > 0.0 } ?: 1.0
+    val axis = MaterialTheme.colorScheme.outline
+    val line = MaterialTheme.colorScheme.primary
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(money(maxValue), style = MaterialTheme.typography.labelSmall)
+            Text("金额", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Canvas(Modifier.fillMaxWidth().height(176.dp)) {
+            val left = 8f
+            val right = size.width - 8f
+            val top = 8f
+            val bottom = size.height - 8f
+            drawLine(axis, Offset(left, bottom), Offset(right, bottom), strokeWidth = 1.2f)
+            drawLine(axis, Offset(left, top), Offset(left, bottom), strokeWidth = 1.2f)
+            val points = items.mapIndexed { index, item ->
+                val x = if (items.size == 1) (left + right) / 2f else left + (right - left) * index / (items.size - 1).toFloat()
+                val y = bottom - (bottom - top) * (item.amount / maxValue).toFloat()
+                Offset(x, y)
+            }
+            points.zipWithNext().forEach { (a, b) -> drawLine(line, a, b, strokeWidth = 4f, cap = StrokeCap.Round) }
+            points.forEach { point -> drawCircle(line, radius = 5f, center = point) }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            items.forEach { item ->
+                Column(
+                    modifier = Modifier.weight(1f).clickable { onNoteClick(item.key) }.padding(vertical = 2.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(item.label, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, maxLines = 2)
+                    Text(money(item.amount), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
+                }
+            }
+        }
+    }
+}
+
+'''
+          text = text.replace(marker, function + marker, 1)
+          path.write_text(text)
+          PY
+      - name: Commit patch and remove temporary workflow
+        run: |
+          rm .github/workflows/patch-analytics-a-once.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/src/main/java/com/anxiousspending/app/AnalyticsHub.kt .github/workflows/patch-analytics-a-once.yml
+          git commit -m 'Use line chart for category note comparison'
+          git push
