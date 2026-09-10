@@ -35,7 +35,8 @@ class ExpenseStore(context: Context) {
                             currency = currency,
                             exchangeRateToCny = exchangeRateToCny,
                             cnyAmount = obj.optDouble("cnyAmount", amount * exchangeRateToCny),
-                            paymentSource = paymentSource
+                            paymentSource = paymentSource,
+                            entryType = obj.optString("entryType", "expense")
                         )
                     )
                 }
@@ -57,6 +58,7 @@ class ExpenseStore(context: Context) {
                     put("exchangeRateToCny", expense.exchangeRateToCny)
                     put("cnyAmount", expense.cnyAmount)
                     put("paymentSource", expense.paymentSource)
+                    put("entryType", expense.entryType)
                 }
             )
         }
