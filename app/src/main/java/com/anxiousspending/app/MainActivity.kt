@@ -7,6 +7,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
@@ -14,10 +16,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import java.time.LocalDate
-import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 
@@ -99,8 +103,7 @@ private fun evaluateExpression(raw: String): Double? {
             index++
         }
         if (start == index) return null
-        val number = expression.substring(start, index).toDoubleOrNull() ?: return null
-        numbers += number
+        numbers += expression.substring(start, index).toDoubleOrNull() ?: return null
 
         if (index < expression.length) {
             val op = expression[index]
@@ -149,13 +152,13 @@ fun AnxiousSpendingApp(store: ExpenseStore) {
                 NavigationBarItem(
                     selected = page == 0,
                     onClick = { page = 0 },
-                    icon = { Text("账") },
+                    icon = { Text("●", style = MaterialTheme.typography.labelSmall) },
                     label = { Text("记录") }
                 )
                 NavigationBarItem(
                     selected = page == 1,
                     onClick = { page = 1 },
-                    icon = { Text("析") },
+                    icon = { Text("●", style = MaterialTheme.typography.labelSmall) },
                     label = { Text("分析") }
                 )
             }
@@ -185,8 +188,8 @@ fun AnxiousSpendingApp(store: ExpenseStore) {
         ExpenseDialog(
             initialExpense = null,
             onDismiss = { showAdd = false },
-            onSave = { expense ->
-                persist(expenses + expense)
+            onSave = {
+                persist(expenses + it)
                 showAdd = false
             }
         )
@@ -286,60 +289,37 @@ private fun AnalysisPage(expenses: List<Expense>) {
     }
     val yearExpenses = expenses.filter { it.date.year == selectedYear }
     val activeExpenses = if (analysisMode == 0) monthExpenses else yearExpenses
+    val nonEmptyMonths = (1..12).mapNotNull { month ->
+        val list = yearExpenses.filter { it.date.monthValue == month }
+        if (list.isEmpty()) null else month to list.sumOf { it.amount }
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
             ElevatedCard(Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("年份", style = MaterialTheme.typography.labelMedium)
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(onClick = { selectedYear -= 1 }) { Text("‹") }
-                        Text(
-                            "$selectedYear 年",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        TextButton(onClick = { selectedYear += 1 }) { Text("›") }
-                    }
-                }
-            }
-        }
-
-        item {
-            ElevatedCard(Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text("月份", style = MaterialTheme.typography.labelMedium)
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(onClick = {
-                            selectedMonth = if (selectedMonth == 1) 12 else selectedMonth - 1
-                        }) { Text("‹") }
-                        Text(
-                            "$selectedMonth 月",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        TextButton(onClick = {
-                            selectedMonth = if (selectedMonth == 12) 1 else selectedMonth + 1
-                        }) { Text("›") }
-                    }
+                    CompactSelector(
+                        label = "年份",
+                        value = "$selectedYear",
+                        onPrevious = { selectedYear -= 1 },
+                        onNext = { selectedYear += 1 },
+                        modifier = Modifier.weight(1f)
+                    )
+                    VerticalDivider(Modifier.height(48.dp))
+                    CompactSelector(
+                        label = "月份",
+                        value = "${selectedMonth}月",
+                        onPrevious = { selectedMonth = if (selectedMonth == 1) 12 else selectedMonth - 1 },
+                        onNext = { selectedMonth = if (selectedMonth == 12) 1 else selectedMonth + 1 },
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
         }
@@ -350,65 +330,42 @@ private fun AnalysisPage(expenses: List<Expense>) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 if (analysisMode == 0) {
-                    Button(onClick = { analysisMode = 0 }, modifier = Modifier.weight(1f)) {
-                        Text("月分析")
-                    }
-                    OutlinedButton(onClick = { analysisMode = 1 }, modifier = Modifier.weight(1f)) {
-                        Text("年分析")
-                    }
+                    Button(onClick = { analysisMode = 0 }, modifier = Modifier.weight(1f)) { Text("月分析") }
+                    OutlinedButton(onClick = { analysisMode = 1 }, modifier = Modifier.weight(1f)) { Text("年分析") }
                 } else {
-                    OutlinedButton(onClick = { analysisMode = 0 }, modifier = Modifier.weight(1f)) {
-                        Text("月分析")
-                    }
-                    Button(onClick = { analysisMode = 1 }, modifier = Modifier.weight(1f)) {
-                        Text("年分析")
-                    }
+                    OutlinedButton(onClick = { analysisMode = 0 }, modifier = Modifier.weight(1f)) { Text("月分析") }
+                    Button(onClick = { analysisMode = 1 }, modifier = Modifier.weight(1f)) { Text("年分析") }
                 }
             }
         }
 
         item {
-            val title = if (analysisMode == 0) "$selectedYear 年 $selectedMonth 月" else "$selectedYear 年"
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text(
-                    "¥%.2f".format(activeExpenses.sumOf { it.amount }),
-                    style = MaterialTheme.typography.headlineMedium
-                )
+            val title = if (analysisMode == 0) "$selectedYear 年 $selectedMonth 月支出" else "$selectedYear 年支出"
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("¥%.2f".format(activeExpenses.sumOf { it.amount }), style = MaterialTheme.typography.headlineMedium)
                 Text("${activeExpenses.size} 笔", style = MaterialTheme.typography.bodySmall)
             }
         }
 
         if (analysisMode == 1) {
-            item {
-                Text("每月", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            }
-            if (yearExpenses.isEmpty()) {
+            item { Text("每月", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
+            if (nonEmptyMonths.isEmpty()) {
                 item { Text("这一年还没有账。") }
             } else {
-                items((1..12).toList(), key = { "month-$it" }) { month ->
-                    val list = yearExpenses.filter { it.date.monthValue == month }
-                    if (list.isNotEmpty()) {
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("${month}月")
-                            Text("¥%.2f".format(list.sumOf { it.amount }))
-                        }
+                items(nonEmptyMonths, key = { it.first }) { (month, total) ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("${month}月")
+                        Text("¥%.2f".format(total))
                     }
                 }
             }
         }
 
-        item {
-            Text("分类", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        }
+        item { Text("分类", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
 
         if (activeExpenses.isEmpty()) {
-            item {
-                Text(if (analysisMode == 0) "这个月还没有账。" else "这一年还没有账。")
-            }
+            item { Text(if (analysisMode == 0) "这个月还没有账。" else "这一年还没有账。") }
         } else {
             items(
                 activeExpenses.groupBy { it.category }
@@ -416,14 +373,29 @@ private fun AnalysisPage(expenses: List<Expense>) {
                     .sortedByDescending { (_, list) -> list.sumOf { it.amount } },
                 key = { "category-${analysisMode}-${it.first}" }
             ) { (category, list) ->
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(categorySubtitle(category), fontWeight = FontWeight.Medium)
                     Text("¥%.2f".format(list.sumOf { it.amount }))
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun CompactSelector(
+    label: String,
+    value: String,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(label, style = MaterialTheme.typography.labelSmall)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = onPrevious, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("‹") }
+            Text(value, fontWeight = FontWeight.Bold, modifier = Modifier.widthIn(min = 56.dp))
+            TextButton(onClick = onNext, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("›") }
         }
     }
 }
@@ -434,14 +406,13 @@ private fun ExpenseDialog(
     onDismiss: () -> Unit,
     onSave: (Expense) -> Unit
 ) {
+    val focusManager = LocalFocusManager.current
     var expression by remember(initialExpense?.id) {
         mutableStateOf(initialExpense?.let { formatAmount(it.amount) }.orEmpty())
     }
     var note by remember(initialExpense?.id) { mutableStateOf(initialExpense?.note.orEmpty()) }
     var categoryIndex by remember(initialExpense?.id) {
-        mutableIntStateOf(
-            categories.indexOfFirst { it.key == initialExpense?.category }.takeIf { it >= 0 } ?: 0
-        )
+        mutableIntStateOf(categories.indexOfFirst { it.key == initialExpense?.category }.takeIf { it >= 0 } ?: 0)
     }
     var categoryMenu by remember { mutableStateOf(false) }
     var selectedDate by remember(initialExpense?.id) {
@@ -458,9 +429,7 @@ private fun ExpenseDialog(
             expression = if (last in operators) expression.dropLast(1) + token else expression + token
         } else if (token == ".") {
             val currentNumber = expression.takeLastWhile { it.isDigit() || it == '.' }
-            if (!currentNumber.contains('.')) {
-                expression += if (currentNumber.isEmpty()) "0." else "."
-            }
+            if (!currentNumber.contains('.')) expression += if (currentNumber.isEmpty()) "0." else "."
         } else {
             expression += token
         }
@@ -476,8 +445,7 @@ private fun ExpenseDialog(
         }
     }
 
-    val calculatedAmount = evaluateExpression(expression)
-        ?: expression.toDoubleOrNull()
+    val calculatedAmount = evaluateExpression(expression) ?: expression.toDoubleOrNull()
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -500,6 +468,13 @@ private fun ExpenseDialog(
                                 else -> Text("可以直接输入，也可以用下面的计算器")
                             }
                         },
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Decimal,
+                            imeAction = ImeAction.Done
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onDone = { focusManager.clearFocus() }
+                        ),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -541,6 +516,11 @@ private fun ExpenseDialog(
                         value = note,
                         onValueChange = { note = it },
                         label = { Text("备注") },
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(
+                            onDone = { focusManager.clearFocus() }
+                        ),
+                        singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -613,9 +593,7 @@ private fun CalculatorPad(
                         Text(label)
                     }
                 }
-                repeat(4 - row.size) {
-                    Spacer(Modifier.weight(1f))
-                }
+                repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
             }
         }
     }
