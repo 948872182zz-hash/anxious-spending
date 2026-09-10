@@ -25,6 +25,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -68,6 +69,7 @@ data class Expense(
 data class CategoryOption(val key: String, val subtitle: String)
 
 private data class NoteSuggestion(
+    val category: String,
     val text: String,
     val count: Int,
     val clickCount: Int,
@@ -107,12 +109,15 @@ private fun buildNoteSuggestions(
 ): List<NoteSuggestion> =
     expenses
         .filter { it.note.trim().isNotEmpty() }
-        .groupBy { it.note.trim() }
-        .map { (text, matches) ->
+        .groupBy { it.category to it.note.trim() }
+        .map { (key, matches) ->
+            val category = key.first
+            val text = key.second
             NoteSuggestion(
+                category = category,
                 text = text,
                 count = matches.size,
-                clickCount = clickCounts[text] ?: 0,
+                clickCount = clickCounts[NoteTagStore.keyFor(category, text)] ?: 0,
                 lastUsed = matches.maxOf { it.date }
             )
         }
@@ -188,7 +193,9 @@ fun AnxiousSpendingApp(store: ExpenseStore, noteTagStore: NoteTagStore) {
         expenses = next.sortedWith(compareByDescending<Expense> { it.date }.thenByDescending { it.id })
         store.save(expenses)
     }
-    fun registerNoteTagClick(text: String) { noteTagClicks = noteTagStore.incrementClick(text) }
+    fun registerNoteTagClick(category: String, text: String) {
+        noteTagClicks = noteTagStore.incrementClick(category, text)
+    }
 
     Scaffold(
         topBar = {
@@ -418,7 +425,7 @@ private fun CompactDateField(
 ) {
     val shape = RoundedCornerShape(8.dp)
     Box(
-        modifier = Modifier.width(width.dp).height(36.dp)
+        modifier = Modifier.width(width.dp).height(34.dp)
             .border(1.dp, MaterialTheme.colorScheme.outline, shape),
         contentAlignment = Alignment.Center
     ) {
@@ -434,7 +441,7 @@ private fun CompactDateField(
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = imeAction),
             keyboardActions = KeyboardActions(onNext = { onImeAction() }, onDone = { onImeAction() }),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 3.dp)
         )
     }
 }
@@ -443,7 +450,7 @@ private fun CompactDateField(
 private fun ExpenseDialog(
     initialExpense: Expense?,
     noteSuggestions: List<NoteSuggestion>,
-    onNoteTagClick: (String) -> Unit,
+    onNoteTagClick: (String, String) -> Unit,
     onDismiss: () -> Unit,
     onSave: (Expense) -> Unit
 ) {
@@ -495,6 +502,11 @@ private fun ExpenseDialog(
     val calculatedAmount = evaluateExpression(expression) ?: expression.toDoubleOrNull()
     val parsedDate = parseDateParts(dateYear, dateMonth, dateDay)
     val hasCategory = categoryIndex in categories.indices
+    val selectedCategoryKey = categories.getOrNull(categoryIndex)?.key
+    val visibleSuggestions = remember(noteSuggestions, selectedCategoryKey) {
+        if (selectedCategoryKey == null) emptyList()
+        else noteSuggestions.filter { it.category == selectedCategoryKey }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -516,7 +528,7 @@ private fun ExpenseDialog(
                 dialogView.post { inputMethodManager.hideSoftInputFromWindow(dialogView.windowToken, 0) }
             }
 
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 item {
                     OutlinedTextField(
                         value = expression,
@@ -552,32 +564,34 @@ private fun ExpenseDialog(
                 }
 
                 item {
-                    Box {
-                        OutlinedButton(
-                            onClick = { categoryMenu = true },
-                            modifier = Modifier.fillMaxWidth().height(42.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
-                        ) {
-                            Text(
-                                if (hasCategory) categories[categoryIndex].subtitle else "请选择分类 *",
-                                fontWeight = if (hasCategory) FontWeight.SemiBold else FontWeight.Normal
-                            )
-                        }
-                        DropdownMenu(expanded = categoryMenu, onDismissRequest = { categoryMenu = false }) {
-                            categories.forEachIndexed { index, item ->
-                                DropdownMenuItem(
-                                    text = { Text(item.subtitle, fontWeight = FontWeight.Medium) },
-                                    onClick = {
-                                        categoryIndex = index
-                                        categoryError = false
-                                        categoryMenu = false
-                                    }
+                    Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                        Box {
+                            OutlinedButton(
+                                onClick = { categoryMenu = true },
+                                modifier = Modifier.fillMaxWidth().height(40.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
+                            ) {
+                                Text(
+                                    if (hasCategory) categories[categoryIndex].subtitle else "请选择分类 *",
+                                    fontWeight = if (hasCategory) FontWeight.SemiBold else FontWeight.Normal
                                 )
                             }
+                            DropdownMenu(expanded = categoryMenu, onDismissRequest = { categoryMenu = false }) {
+                                categories.forEachIndexed { index, item ->
+                                    DropdownMenuItem(
+                                        text = { Text(item.subtitle, fontWeight = FontWeight.Medium) },
+                                        onClick = {
+                                            categoryIndex = index
+                                            categoryError = false
+                                            categoryMenu = false
+                                        }
+                                    )
+                                }
+                            }
                         }
-                    }
-                    if (categoryError) {
-                        Text("请选择分类", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
+                        if (categoryError) {
+                            Text("请选择分类", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
+                        }
                     }
                 }
 
@@ -600,20 +614,34 @@ private fun ExpenseDialog(
                     )
                 }
 
-                if (noteSuggestions.isNotEmpty()) {
-                    item {
-                        Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
-                            Text("常用备注", style = MaterialTheme.typography.labelSmall)
-                            LazyRow(
-                                modifier = Modifier.fillMaxWidth(),
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 32.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("常用备注", style = MaterialTheme.typography.labelSmall)
+                        Spacer(Modifier.width(6.dp))
+                        when {
+                            selectedCategoryKey == null -> Text(
+                                "先选分类",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            visibleSuggestions.isEmpty() -> Text(
+                                "暂无",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            else -> LazyRow(
+                                modifier = Modifier.weight(1f),
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                                 contentPadding = PaddingValues(end = 8.dp)
                             ) {
-                                items(noteSuggestions, key = { it.text }) { suggestion ->
+                                items(visibleSuggestions, key = { "${it.category}-${it.text}" }) { suggestion ->
                                     AssistChip(
                                         onClick = {
                                             note = suggestion.text
-                                            onNoteTagClick(suggestion.text)
+                                            onNoteTagClick(suggestion.category, suggestion.text)
                                             finishEditing()
                                         },
                                         label = { Text("${suggestion.text} · ${suggestion.count}次") }
@@ -634,25 +662,25 @@ private fun ExpenseDialog(
                             CompactDateField(
                                 value = dateYear,
                                 maxDigits = 4,
-                                width = 64,
+                                width = 60,
                                 imeAction = ImeAction.Next,
                                 onValueChange = { dateYear = it; dateError = false },
                                 onImeAction = { focusManager.moveFocus(FocusDirection.Next) }
                             )
-                            Text("/", modifier = Modifier.padding(horizontal = 2.dp))
+                            Text("/", modifier = Modifier.padding(horizontal = 1.dp))
                             CompactDateField(
                                 value = dateMonth,
                                 maxDigits = 2,
-                                width = 40,
+                                width = 36,
                                 imeAction = ImeAction.Next,
                                 onValueChange = { dateMonth = it; dateError = false },
                                 onImeAction = { focusManager.moveFocus(FocusDirection.Next) }
                             )
-                            Text("/", modifier = Modifier.padding(horizontal = 2.dp))
+                            Text("/", modifier = Modifier.padding(horizontal = 1.dp))
                             CompactDateField(
                                 value = dateDay,
                                 maxDigits = 2,
-                                width = 40,
+                                width = 36,
                                 imeAction = ImeAction.Done,
                                 onValueChange = { dateDay = it; dateError = false },
                                 onImeAction = {
@@ -660,13 +688,14 @@ private fun ExpenseDialog(
                                     if (!dateError) finishEditing()
                                 }
                             )
-                            IconButton(
-                                onClick = {
+                            Spacer(Modifier.width(2.dp))
+                            Box(
+                                modifier = Modifier.size(26.dp).clickable {
                                     dateYear = ""; dateMonth = ""; dateDay = ""; dateError = false
                                 },
-                                modifier = Modifier.size(28.dp)
+                                contentAlignment = Alignment.Center
                             ) {
-                                Text("×", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Black)
+                                Text("×", color = Color.Black, fontWeight = FontWeight.Black)
                             }
                         }
                         if (dateError || ((dateYear.isNotBlank() || dateMonth.isNotBlank() || dateDay.isNotBlank()) && parsedDate == null)) {
@@ -732,12 +761,12 @@ private fun CalculatorPad(
         listOf("1", "2", "3", "="),
         listOf("00", "0", ".")
     )
-    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         rows.forEach { row ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 row.forEach { label ->
                     Surface(
-                        modifier = Modifier.weight(1f).height(36.dp).clickable {
+                        modifier = Modifier.weight(1f).height(34.dp).clickable {
                             when (label) {
                                 "C" -> onClear()
                                 "⌫" -> onBackspace()
@@ -745,7 +774,7 @@ private fun CalculatorPad(
                                 else -> onToken(label)
                             }
                         },
-                        shape = RoundedCornerShape(18.dp),
+                        shape = RoundedCornerShape(17.dp),
                         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                         color = MaterialTheme.colorScheme.surface
                     ) {
