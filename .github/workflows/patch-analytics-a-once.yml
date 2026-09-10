@@ -14,9 +14,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Make second-layer A a categorical line chart
+        env:
+          FUNCTION_B64: QENvbXBvc2FibGUKcHJpdmF0ZSBmdW4gQ2F0ZWdvcmljYWxOb3RlTGluZUNoYXJ0KGl0ZW1zOiBMaXN0PEFtb3VudEl0ZW0+LCBvbk5vdGVDbGljazogKFN0cmluZykgLT4gVW5pdCkgewogICAgaWYgKGl0ZW1zLmlzRW1wdHkoKSkgcmV0dXJuCiAgICB2YWwgbWF4VmFsdWUgPSBpdGVtcy5tYXhPZiB7IGl0LmFtb3VudCB9LnRha2VJZiB7IGl0ID4gMC4wIH0gPzogMS4wCiAgICB2YWwgYXhpcyA9IE1hdGVyaWFsVGhlbWUuY29sb3JTY2hlbWUub3V0bGluZQogICAgdmFsIGxpbmUgPSBNYXRlcmlhbFRoZW1lLmNvbG9yU2NoZW1lLnByaW1hcnkKCiAgICBDb2x1bW4odmVydGljYWxBcnJhbmdlbWVudCA9IEFycmFuZ2VtZW50LnNwYWNlZEJ5KDguZHApKSB7CiAgICAgICAgUm93KE1vZGlmaWVyLmZpbGxNYXhXaWR0aCgpLCBob3Jpem9udGFsQXJyYW5nZW1lbnQgPSBBcnJhbmdlbWVudC5TcGFjZUJldHdlZW4pIHsKICAgICAgICAgICAgVGV4dChtb25leShtYXhWYWx1ZSksIHN0eWxlID0gTWF0ZXJpYWxUaGVtZS50eXBvZ3JhcGh5LmxhYmVsU21hbGwpCiAgICAgICAgICAgIFRleHQoIumHkeminSIsIHN0eWxlID0gTWF0ZXJpYWxUaGVtZS50eXBvZ3JhcGh5LmxhYmVsU21hbGwsIGNvbG9yID0gTWF0ZXJpYWxUaGVtZS5jb2xvclNjaGVtZS5vblN1cmZhY2VWYXJpYW50KQogICAgICAgIH0KICAgICAgICBDYW52YXMoTW9kaWZpZXIuZmlsbE1heFdpZHRoKCkuaGVpZ2h0KDE3Ni5kcCkpIHsKICAgICAgICAgICAgdmFsIGxlZnQgPSA4ZgogICAgICAgICAgICB2YWwgcmlnaHQgPSBzaXplLndpZHRoIC0gOGYKICAgICAgICAgICAgdmFsIHRvcCA9IDhmCiAgICAgICAgICAgIHZhbCBib3R0b20gPSBzaXplLmhlaWdodCAtIDhmCiAgICAgICAgICAgIGRyYXdMaW5lKGF4aXMsIE9mZnNldChsZWZ0LCBib3R0b20pLCBPZmZzZXQocmlnaHQsIGJvdHRvbSksIHN0cm9rZVdpZHRoID0gMS4yZikKICAgICAgICAgICAgZHJhd0xpbmUoYXhpcywgT2Zmc2V0KGxlZnQsIHRvcCksIE9mZnNldChsZWZ0LCBib3R0b20pLCBzdHJva2VXaWR0aCA9IDEuMmYpCiAgICAgICAgICAgIHZhbCBwb2ludHMgPSBpdGVtcy5tYXBJbmRleGVkIHsgaW5kZXgsIGl0ZW0gLT4KICAgICAgICAgICAgICAgIHZhbCB4ID0gaWYgKGl0ZW1zLnNpemUgPT0gMSkgKGxlZnQgKyByaWdodCkgLyAyZiBlbHNlIGxlZnQgKyAocmlnaHQgLSBsZWZ0KSAqIGluZGV4IC8gKGl0ZW1zLnNpemUgLSAxKS50b0Zsb2F0KCkKICAgICAgICAgICAgICAgIHZhbCB5ID0gYm90dG9tIC0gKGJvdHRvbSAtIHRvcCkgKiAoaXRlbS5hbW91bnQgLyBtYXhWYWx1ZSkudG9GbG9hdCgpCiAgICAgICAgICAgICAgICBPZmZzZXQoeCwgeSkKICAgICAgICAgICAgfQogICAgICAgICAgICBwb2ludHMuemlwV2l0aE5leHQoKS5mb3JFYWNoIHsgKGEsIGIpIC0+IGRyYXdMaW5lKGxpbmUsIGEsIGIsIHN0cm9rZVdpZHRoID0gNGYsIGNhcCA9IFN0cm9rZUNhcC5Sb3VuZCkgfQogICAgICAgICAgICBwb2ludHMuZm9yRWFjaCB7IHBvaW50IC0+IGRyYXdDaXJjbGUobGluZSwgcmFkaXVzID0gNWYsIGNlbnRlciA9IHBvaW50KSB9CiAgICAgICAgfQogICAgICAgIFJvdyhNb2RpZmllci5maWxsTWF4V2lkdGgoKSwgaG9yaXpvbnRhbEFycmFuZ2VtZW50ID0gQXJyYW5nZW1lbnQuc3BhY2VkQnkoNC5kcCkpIHsKICAgICAgICAgICAgaXRlbXMuZm9yRWFjaCB7IGl0ZW0gLT4KICAgICAgICAgICAgICAgIENvbHVtbigKICAgICAgICAgICAgICAgICAgICBtb2RpZmllciA9IE1vZGlmaWVyLndlaWdodCgxZikuY2xpY2thYmxlIHsgb25Ob3RlQ2xpY2soaXRlbS5rZXkpIH0ucGFkZGluZyh2ZXJ0aWNhbCA9IDIuZHApLAogICAgICAgICAgICAgICAgICAgIGhvcml6b250YWxBbGlnbm1lbnQgPSBBbGlnbm1lbnQuQ2VudGVySG9yaXpvbnRhbGx5CiAgICAgICAgICAgICAgICApIHsKICAgICAgICAgICAgICAgICAgICBUZXh0KGl0ZW0ubGFiZWwsIHN0eWxlID0gTWF0ZXJpYWxUaGVtZS50eXBvZ3JhcGh5LmxhYmVsU21hbGwsIHRleHRBbGlnbiA9IFRleHRBbGlnbi5DZW50ZXIsIG1heExpbmVzID0gMikKICAgICAgICAgICAgICAgICAgICBUZXh0KG1vbmV5KGl0ZW0uYW1vdW50KSwgc3R5bGUgPSBNYXRlcmlhbFRoZW1lLnR5cG9ncmFwaHkubGFiZWxTbWFsbCwgZm9udFdlaWdodCA9IEZvbnRXZWlnaHQuU2VtaUJvbGQsIHRleHRBbGlnbiA9IFRleHRBbGlnbi5DZW50ZXIpCiAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgIH0KICAgICAgICB9CiAgICB9Cn0KCg==
         run: |
           python - <<'PY'
           from pathlib import Path
+          import base64, os
           path = Path('app/src/main/java/com/anxiousspending/app/AnalyticsHub.kt')
           text = path.read_text()
           old = '                    else AmountBarList(noteTotals) { onNoteDetail(it.key) }'
@@ -27,48 +30,7 @@ jobs:
           marker = '@Composable\nprivate fun CategorySecondLayer('
           if marker not in text:
               raise SystemExit('CategorySecondLayer marker not found')
-          function = r'''@Composable
-private fun CategoricalNoteLineChart(items: List<AmountItem>, onNoteClick: (String) -> Unit) {
-    if (items.isEmpty()) return
-    val maxValue = items.maxOf { it.amount }.takeIf { it > 0.0 } ?: 1.0
-    val axis = MaterialTheme.colorScheme.outline
-    val line = MaterialTheme.colorScheme.primary
-
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(money(maxValue), style = MaterialTheme.typography.labelSmall)
-            Text("金额", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Canvas(Modifier.fillMaxWidth().height(176.dp)) {
-            val left = 8f
-            val right = size.width - 8f
-            val top = 8f
-            val bottom = size.height - 8f
-            drawLine(axis, Offset(left, bottom), Offset(right, bottom), strokeWidth = 1.2f)
-            drawLine(axis, Offset(left, top), Offset(left, bottom), strokeWidth = 1.2f)
-            val points = items.mapIndexed { index, item ->
-                val x = if (items.size == 1) (left + right) / 2f else left + (right - left) * index / (items.size - 1).toFloat()
-                val y = bottom - (bottom - top) * (item.amount / maxValue).toFloat()
-                Offset(x, y)
-            }
-            points.zipWithNext().forEach { (a, b) -> drawLine(line, a, b, strokeWidth = 4f, cap = StrokeCap.Round) }
-            points.forEach { point -> drawCircle(line, radius = 5f, center = point) }
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            items.forEach { item ->
-                Column(
-                    modifier = Modifier.weight(1f).clickable { onNoteClick(item.key) }.padding(vertical = 2.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(item.label, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, maxLines = 2)
-                    Text(money(item.amount), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
-                }
-            }
-        }
-    }
-}
-
-'''
+          function = base64.b64decode(os.environ['FUNCTION_B64']).decode()
           text = text.replace(marker, function + marker, 1)
           path.write_text(text)
           PY
