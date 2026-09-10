@@ -476,6 +476,47 @@ private fun AmountBarList(items: List<AmountItem>, onClick: ((AmountItem) -> Uni
 }
 
 @Composable
+private fun CategoricalNoteLineChart(items: List<AmountItem>, onNoteClick: (String) -> Unit) {
+    if (items.isEmpty()) return
+    val maxValue = items.maxOf { it.amount }.takeIf { it > 0.0 } ?: 1.0
+    val axis = MaterialTheme.colorScheme.outline
+    val line = MaterialTheme.colorScheme.primary
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(money(maxValue), style = MaterialTheme.typography.labelSmall)
+            Text("金额", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Canvas(Modifier.fillMaxWidth().height(176.dp)) {
+            val left = 8f
+            val right = size.width - 8f
+            val top = 8f
+            val bottom = size.height - 8f
+            drawLine(axis, Offset(left, bottom), Offset(right, bottom), strokeWidth = 1.2f)
+            drawLine(axis, Offset(left, top), Offset(left, bottom), strokeWidth = 1.2f)
+            val points = items.mapIndexed { index, item ->
+                val x = if (items.size == 1) (left + right) / 2f else left + (right - left) * index / (items.size - 1).toFloat()
+                val y = bottom - (bottom - top) * (item.amount / maxValue).toFloat()
+                Offset(x, y)
+            }
+            points.zipWithNext().forEach { (a, b) -> drawLine(line, a, b, strokeWidth = 4f, cap = StrokeCap.Round) }
+            points.forEach { point -> drawCircle(line, radius = 5f, center = point) }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            items.forEach { item ->
+                Column(
+                    modifier = Modifier.weight(1f).clickable { onNoteClick(item.key) }.padding(vertical = 2.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(item.label, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center, maxLines = 2)
+                    Text(money(item.amount), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun CategorySecondLayer(
     category: String,
     activeExpenses: List<Expense>,
@@ -530,7 +571,7 @@ private fun CategorySecondLayer(
             item {
                 AnalyticsSectionCard("常用备注金额对比", "x 轴是备注 · y 轴是金额") {
                     if (noteTotals.isEmpty()) Text("这个时间段没有可统计的常用备注。")
-                    else AmountBarList(noteTotals) { onNoteDetail(it.key) }
+                    else CategoricalNoteLineChart(noteTotals, onNoteDetail)
                 }
             }
         } else {
