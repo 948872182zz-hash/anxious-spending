@@ -16,6 +16,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
@@ -540,6 +545,11 @@ private fun ExpenseDialog(
                         value = note,
                         onValueChange = { note = it },
                         label = { Text("备注") },
+                        trailingIcon = {
+                            IconButton(onClick = { finishEditing() }) {
+                                Text("✓", fontWeight = FontWeight.Bold)
+                            }
+                        },
                         keyboardOptions = KeyboardOptions(
                             keyboardType = KeyboardType.Text,
                             imeAction = ImeAction.Done
@@ -548,7 +558,16 @@ private fun ExpenseDialog(
                             onDone = { finishEditing() }
                         ),
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onPreviewKeyEvent { event ->
+                                if (event.type == KeyEventType.KeyDown && event.key == Key.Enter) {
+                                    finishEditing()
+                                    true
+                                } else {
+                                    false
+                                }
+                            }
                     )
                 }
 
