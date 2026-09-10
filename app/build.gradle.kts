@@ -4,6 +4,8 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val buildNumber = providers.gradleProperty("buildNumber").orNull?.toIntOrNull() ?: 1
+
 android {
     namespace = "com.anxiousspending.app"
     compileSdk = 35
@@ -12,8 +14,8 @@ android {
         applicationId = "com.anxiousspending.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = buildNumber
+        versionName = "0.1.$buildNumber"
     }
 
     buildFeatures {
