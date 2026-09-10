@@ -18,6 +18,13 @@ class ExpenseStore(context: Context) {
                     val amount = obj.getDouble("amount")
                     val currency = obj.optString("currency", "CNY")
                     val exchangeRateToCny = obj.optDouble("exchangeRateToCny", 1.0)
+                    val paymentSource = if (obj.has("paymentSource")) {
+                        obj.optString("paymentSource", "other")
+                    } else {
+                        // Legacy migration: all old non-USD entries were paid via Alipay.
+                        // Old USD entries default to Other. Every entry remains editable in the UI.
+                        if (currency == "USD") "other" else "alipay"
+                    }
                     add(
                         Expense(
                             id = obj.getString("id"),
@@ -27,7 +34,8 @@ class ExpenseStore(context: Context) {
                             date = LocalDate.parse(obj.getString("date")),
                             currency = currency,
                             exchangeRateToCny = exchangeRateToCny,
-                            cnyAmount = obj.optDouble("cnyAmount", amount * exchangeRateToCny)
+                            cnyAmount = obj.optDouble("cnyAmount", amount * exchangeRateToCny),
+                            paymentSource = paymentSource
                         )
                     )
                 }
@@ -48,6 +56,7 @@ class ExpenseStore(context: Context) {
                     put("currency", expense.currency)
                     put("exchangeRateToCny", expense.exchangeRateToCny)
                     put("cnyAmount", expense.cnyAmount)
+                    put("paymentSource", expense.paymentSource)
                 }
             )
         }
