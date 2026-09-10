@@ -10,12 +10,27 @@ android {
     namespace = "com.anxiousspending.app"
     compileSdk = 35
 
+    signingConfigs {
+        getByName("debug") {
+            storeFile = rootProject.file("ci/debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     defaultConfig {
         applicationId = "com.anxiousspending.app"
         minSdk = 26
         targetSdk = 35
         versionCode = buildNumber
         versionName = "0.1.$buildNumber"
+    }
+
+    buildTypes {
+        getByName("debug") {
+            signingConfig = signingConfigs.getByName("debug")
+        }
     }
 
     buildFeatures {
