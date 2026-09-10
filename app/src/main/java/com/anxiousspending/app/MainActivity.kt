@@ -298,7 +298,7 @@ fun AnxiousSpendingApp(
     ) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
             if (page == 0) LedgerPage(entries, { pendingEdit = it }, { pendingDelete = it })
-            else AnalysisPage(entries)
+            else AnalyticsHub(entries)
         }
     }
 
