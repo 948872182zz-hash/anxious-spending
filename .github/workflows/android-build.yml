@@ -25,11 +25,20 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
+      - name: Restore debug signing key
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: anxious-spending-debug-keystore-v1
+
       - name: Build debug APK
-        run: gradle :app:assembleDebug
+        run: gradle :app:assembleDebug -PbuildNumber=${{ github.run_number }}
+
+      - name: Give APK a visible versioned filename
+        run: cp app/build/outputs/apk/debug/app-debug.apk anxious-spending-v0.1.${{ github.run_number }}.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: anxious-spending-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: anxious-spending-v0.1.${{ github.run_number }}
+          path: anxious-spending-v0.1.${{ github.run_number }}.apk
