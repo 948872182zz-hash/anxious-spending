@@ -1,6 +1,10 @@
 package com.anxiousspending.app
 
+import android.content.Context
+import android.os.Build
 import android.os.Bundle
+import android.view.WindowInsets
+import android.view.inputmethod.InputMethodManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
@@ -23,6 +27,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -429,8 +434,6 @@ private fun ExpenseDialog(
     onDismiss: () -> Unit,
     onSave: (Expense) -> Unit
 ) {
-    val focusManager = LocalFocusManager.current
-    val keyboardController = LocalSoftwareKeyboardController.current
     var expression by remember(initialExpense?.id) {
         mutableStateOf(initialExpense?.let { formatAmount(it.amount) }.orEmpty())
     }
@@ -443,11 +446,6 @@ private fun ExpenseDialog(
         mutableStateOf(initialExpense?.date ?: LocalDate.now())
     }
     var calculatorError by remember { mutableStateOf(false) }
-
-    fun finishEditing() {
-        focusManager.clearFocus(force = true)
-        keyboardController?.hide()
-    }
 
     fun appendToken(token: String) {
         calculatorError = false
@@ -480,6 +478,25 @@ private fun ExpenseDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (initialExpense == null) "记一笔" else "修改这笔") },
         text = {
+            val dialogFocusManager = LocalFocusManager.current
+            val dialogKeyboardController = LocalSoftwareKeyboardController.current
+            val dialogView = LocalView.current
+            val inputMethodManager = remember(dialogView) {
+                dialogView.context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+            }
+
+            fun finishDialogEditing() {
+                dialogFocusManager.clearFocus(force = true)
+                dialogKeyboardController?.hide()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    dialogView.windowInsetsController?.hide(WindowInsets.Type.ime())
+                }
+                inputMethodManager.hideSoftInputFromWindow(dialogView.windowToken, 0)
+                dialogView.post {
+                    inputMethodManager.hideSoftInputFromWindow(dialogView.windowToken, 0)
+                }
+            }
+
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 item {
                     OutlinedTextField(
@@ -502,7 +519,7 @@ private fun ExpenseDialog(
                             imeAction = ImeAction.Done
                         ),
                         keyboardActions = KeyboardActions(
-                            onDone = { finishEditing() }
+                            onDone = { finishDialogEditing() }
                         ),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
@@ -546,7 +563,7 @@ private fun ExpenseDialog(
                         onValueChange = { note = it },
                         label = { Text("备注") },
                         trailingIcon = {
-                            IconButton(onClick = { finishEditing() }) {
+                            IconButton(onClick = { finishDialogEditing() }) {
                                 Text("✓", fontWeight = FontWeight.Bold)
                             }
                         },
@@ -555,14 +572,14 @@ private fun ExpenseDialog(
                             imeAction = ImeAction.Done
                         ),
                         keyboardActions = KeyboardActions(
-                            onDone = { finishEditing() }
+                            onDone = { finishDialogEditing() }
                         ),
                         singleLine = true,
                         modifier = Modifier
                             .fillMaxWidth()
                             .onPreviewKeyEvent { event ->
                                 if (event.type == KeyEventType.KeyDown && event.key == Key.Enter) {
-                                    finishEditing()
+                                    finishDialogEditing()
                                     true
                                 } else {
                                     false
@@ -585,7 +602,6 @@ private fun ExpenseDialog(
             TextButton(
                 enabled = calculatedAmount?.let { it > 0.0 } == true,
                 onClick = {
-                    finishEditing()
                     val amount = calculatedAmount?.takeIf { it > 0.0 } ?: return@TextButton
                     onSave(
                         Expense(
@@ -600,10 +616,7 @@ private fun ExpenseDialog(
             ) { Text(if (initialExpense == null) "保存" else "保存修改") }
         },
         dismissButton = {
-            TextButton(onClick = {
-                finishEditing()
-                onDismiss()
-            }) { Text("取消") }
+            TextButton(onClick = onDismiss) { Text("取消") }
         }
     )
 }
