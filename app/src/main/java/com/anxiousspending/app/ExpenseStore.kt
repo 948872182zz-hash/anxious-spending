@@ -15,13 +15,19 @@ class ExpenseStore(context: Context) {
             buildList {
                 for (i in 0 until array.length()) {
                     val obj = array.getJSONObject(i)
+                    val amount = obj.getDouble("amount")
+                    val currency = obj.optString("currency", "CNY")
+                    val exchangeRateToCny = obj.optDouble("exchangeRateToCny", 1.0)
                     add(
                         Expense(
                             id = obj.getString("id"),
-                            amount = obj.getDouble("amount"),
+                            amount = amount,
                             category = obj.getString("category"),
                             note = obj.optString("note", ""),
-                            date = LocalDate.parse(obj.getString("date"))
+                            date = LocalDate.parse(obj.getString("date")),
+                            currency = currency,
+                            exchangeRateToCny = exchangeRateToCny,
+                            cnyAmount = obj.optDouble("cnyAmount", amount * exchangeRateToCny)
                         )
                     )
                 }
@@ -39,6 +45,9 @@ class ExpenseStore(context: Context) {
                     put("category", expense.category)
                     put("note", expense.note)
                     put("date", expense.date.toString())
+                    put("currency", expense.currency)
+                    put("exchangeRateToCny", expense.exchangeRateToCny)
+                    put("cnyAmount", expense.cnyAmount)
                 }
             )
         }
