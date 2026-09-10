@@ -224,7 +224,7 @@ private fun buildImportPreview(
         if (payment == null) problems += "支付来源"
 
         if (problems.isNotEmpty()) {
-            errors += "第$rowNumber行：${problems.joinToString("、")}有问题"
+            errors += "第${rowNumber}行：${problems.joinToString("、")}有问题"
             return@forEachIndexed
         }
 
