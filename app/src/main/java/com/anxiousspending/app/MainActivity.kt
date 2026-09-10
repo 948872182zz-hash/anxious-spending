@@ -17,9 +17,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -392,10 +394,26 @@ private fun CompactSelector(
 ) {
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(label, style = MaterialTheme.typography.labelSmall)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onPrevious, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("‹") }
-            Text(value, fontWeight = FontWeight.Bold, modifier = Modifier.widthIn(min = 56.dp))
-            TextButton(onClick = onNext, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("›") }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TextButton(
+                onClick = onPrevious,
+                modifier = Modifier.width(48.dp),
+                contentPadding = PaddingValues(0.dp)
+            ) { Text("‹") }
+            Text(
+                value,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(
+                onClick = onNext,
+                modifier = Modifier.width(48.dp),
+                contentPadding = PaddingValues(0.dp)
+            ) { Text("›") }
         }
     }
 }
@@ -407,6 +425,7 @@ private fun ExpenseDialog(
     onSave: (Expense) -> Unit
 ) {
     val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
     var expression by remember(initialExpense?.id) {
         mutableStateOf(initialExpense?.let { formatAmount(it.amount) }.orEmpty())
     }
@@ -419,6 +438,11 @@ private fun ExpenseDialog(
         mutableStateOf(initialExpense?.date ?: LocalDate.now())
     }
     var calculatorError by remember { mutableStateOf(false) }
+
+    fun finishEditing() {
+        focusManager.clearFocus(force = true)
+        keyboardController?.hide()
+    }
 
     fun appendToken(token: String) {
         calculatorError = false
@@ -473,7 +497,7 @@ private fun ExpenseDialog(
                             imeAction = ImeAction.Done
                         ),
                         keyboardActions = KeyboardActions(
-                            onDone = { focusManager.clearFocus() }
+                            onDone = { finishEditing() }
                         ),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
@@ -516,9 +540,12 @@ private fun ExpenseDialog(
                         value = note,
                         onValueChange = { note = it },
                         label = { Text("备注") },
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Text,
+                            imeAction = ImeAction.Done
+                        ),
                         keyboardActions = KeyboardActions(
-                            onDone = { focusManager.clearFocus() }
+                            onDone = { finishEditing() }
                         ),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
@@ -539,6 +566,7 @@ private fun ExpenseDialog(
             TextButton(
                 enabled = calculatedAmount?.let { it > 0.0 } == true,
                 onClick = {
+                    finishEditing()
                     val amount = calculatedAmount?.takeIf { it > 0.0 } ?: return@TextButton
                     onSave(
                         Expense(
@@ -552,7 +580,12 @@ private fun ExpenseDialog(
                 }
             ) { Text(if (initialExpense == null) "保存" else "保存修改") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
+        dismissButton = {
+            TextButton(onClick = {
+                finishEditing()
+                onDismiss()
+            }) { Text("取消") }
+        }
     )
 }
 
