@@ -90,6 +90,7 @@ private val expenseCategories = listOf(
     CategoryOption("shopping", "购物", "BUY STH NEW"),
     CategoryOption("food", "餐饮", "EATING"),
     CategoryOption("game", "游戏", "婷芷我说婷芷"),
+    CategoryOption("entertainment", "娱乐", "LET\'S PARTY"),
     CategoryOption("ai", "AI", "别BAN我"),
     CategoryOption("misc", "杂费", "生活杂费"),
     CategoryOption("transport", "交通", "🚈🚕🚌嘟嘟"),

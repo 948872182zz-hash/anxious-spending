@@ -63,6 +63,7 @@ private val analyticsCategoryNames = mapOf(
     "shopping" to "购物",
     "food" to "餐饮",
     "game" to "游戏",
+    "entertainment" to "娱乐",
     "ai" to "AI",
     "misc" to "杂费",
     "transport" to "交通",

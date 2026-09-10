@@ -22,6 +22,7 @@
 - shopping — `BUY STH NEW`
 - food — `EATING`
 - game — `婷芷我说婷芷`
+- entertainment — `LET\'S PARTY`
 - ai — `别BAN我`
 - misc — `生活杂费`
 - transport — `🚈🚕🚌嘟嘟`
