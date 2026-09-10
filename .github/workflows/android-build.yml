@@ -25,26 +25,14 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
-      - name: Restore debug signing key
-        uses: actions/cache@v4
-        with:
-          path: ~/.android
-          key: anxious-spending-debug-keystore-v2
-
-      - name: Ensure stable debug signing key exists
+      - name: Restore fixed debug signing key
         run: |
-          mkdir -p ~/.android
-          if [ ! -f ~/.android/debug.keystore ]; then
-            keytool -genkeypair \
-              -keystore ~/.android/debug.keystore \
-              -storepass android \
-              -alias androiddebugkey \
-              -keypass android \
-              -dname "CN=Android Debug,O=Android,C=US" \
-              -validity 10000 \
-              -keyalg RSA \
-              -keysize 2048
-          fi
+          base64 --decode ci/debug.keystore.b64 > ci/debug.keystore
+          keytool -list -v \
+            -keystore ci/debug.keystore \
+            -storepass android \
+            -alias androiddebugkey \
+            | grep 'SHA256:'
 
       - name: Build debug APK
         run: gradle :app:assembleDebug -PbuildNumber=${{ github.run_number }}
