@@ -81,7 +81,7 @@ data class Expense(
 data class CategoryOption(val key: String, val name: String, val subtitle: String)
 private data class CurrencyOption(val code: String, val name: String, val symbol: String)
 private data class PaymentSourceOption(val key: String, val name: String, val dot: String, val color: Color)
-private data class NoteSuggestion(
+internal data class NoteSuggestion(
     val entryType: String,
     val category: String,
     val text: String,
@@ -772,7 +772,7 @@ private fun CompactDateField(
 }
 
 @Composable
-fun ExpenseDialog(
+internal fun ExpenseDialog(
     initialExpense: Expense?,
     noteSuggestions: List<NoteSuggestion>,
     rateSnapshot: ExchangeRateSnapshot?,
