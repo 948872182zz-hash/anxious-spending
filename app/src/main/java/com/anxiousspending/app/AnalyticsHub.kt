@@ -521,7 +521,7 @@ private fun VerticalNoteBarChart(items: List<AmountItem>, onNoteClick: (String) 
                     color = barColor,
                     topLeft = Offset(left, bottom - barHeight),
                     size = androidx.compose.ui.geometry.Size(barWidth, barHeight),
-                    cornerRadius = CornerRadius(8f, 8f)
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(8f, 8f)
                 )
             }
         }
