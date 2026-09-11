@@ -923,7 +923,7 @@ internal fun ExpenseDialog(
 
             LazyColumn(
                 modifier = Modifier.height(586.dp),
-                verticalArrangement = Arrangement.spacedBy(7.dp)
+                verticalArrangement = Arrangement.spacedBy(5.dp)
             ) {
                 item {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -938,53 +938,64 @@ internal fun ExpenseDialog(
                 }
 
                 item {
-                    OutlinedTextField(
-                        value = expression,
-                        onValueChange = { next ->
-                            val allowed = next.filter { it.isDigit() || it in listOf('.', '+', '-', '×', '÷', '*', '/') }
-                            expression = allowed.replace('*', '×').replace('/', '÷')
-                            calculatorError = false
-                        },
-                        label = { Text("金额 / 算式") },
-                        trailingIcon = {
-                            Box {
-                                TextButton(onClick = { currencyMenu = true }, contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)) {
-                                    Text("${selectedCurrency.symbol} ${selectedCurrency.code}", fontWeight = FontWeight.Bold)
-                                }
-                                DropdownMenu(expanded = currencyMenu, onDismissRequest = { currencyMenu = false }) {
-                                    currencies.forEachIndexed { index, option ->
-                                        DropdownMenuItem(
-                                            text = { Text("${option.symbol}  ${option.name}  ${option.code}") },
-                                            onClick = {
-                                                currencyIndex = index
-                                                currencyChanged = true
-                                                currencyMenu = false
-                                            }
-                                        )
+                    Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                        OutlinedTextField(
+                            value = expression,
+                            onValueChange = { next ->
+                                val allowed = next.filter { it.isDigit() || it in listOf('.', '+', '-', '×', '÷', '*', '/') }
+                                expression = allowed.replace('*', '×').replace('/', '÷')
+                                calculatorError = false
+                            },
+                            label = { Text("金额 / 算式") },
+                            trailingIcon = {
+                                Box {
+                                    TextButton(onClick = { currencyMenu = true }, contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)) {
+                                        Text("${selectedCurrency.symbol} ${selectedCurrency.code}", fontWeight = FontWeight.Bold)
+                                    }
+                                    DropdownMenu(expanded = currencyMenu, onDismissRequest = { currencyMenu = false }) {
+                                        currencies.forEachIndexed { index, option ->
+                                            DropdownMenuItem(
+                                                text = { Text("${option.symbol}  ${option.name}  ${option.code}") },
+                                                onClick = {
+                                                    currencyIndex = index
+                                                    currencyChanged = true
+                                                    currencyMenu = false
+                                                }
+                                            )
+                                        }
                                     }
                                 }
-                            }
-                        },
-                        supportingText = {
-                            when {
-                                calculatorError -> Text("这个算式算不出来")
-                                selectedCurrency.code != "CNY" && currentRate == null -> Text("暂无可用汇率，联网后自动刷新")
+                            },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(onDone = { finishEditing() }),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Box(
+                            modifier = Modifier.fillMaxWidth().height(18.dp),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            val resultText = when {
+                                calculatorError -> "这个算式算不出来"
+                                selectedCurrency.code != "CNY" && currentRate == null -> "暂无可用汇率，联网后自动刷新"
                                 selectedCurrency.code != "CNY" && convertedCny != null -> {
                                     val sourceText = if (!currencyChanged && initialExpense?.currency == selectedCurrency.code) {
                                         "使用这笔账原汇率"
                                     } else {
                                         rateSnapshot?.let { "汇率更新 ${formatRateTime(it.updatedAtMillis)}" } ?: "缓存汇率"
                                     }
-                                    Text("≈ ¥${formatAmount(convertedCny)} · $sourceText")
+                                    "≈ ¥${formatAmount(convertedCny)} · $sourceText"
                                 }
-                                calculatedAmount != null && expression.any { it in "+-×÷" } -> Text("= ${selectedCurrency.symbol}${formatAmount(calculatedAmount)}")
+                                calculatedAmount != null && expression.any { it in "+-×÷" } -> "= ${selectedCurrency.symbol}${formatAmount(calculatedAmount)}"
+                                else -> ""
                             }
-                        },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(onDone = { finishEditing() }),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                            Text(
+                                resultText,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (calculatorError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
 
                 item {
@@ -1276,7 +1287,7 @@ private fun CalculatorPad(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 row.forEach { label ->
                     Surface(
-                        modifier = Modifier.weight(1f).height(44.dp).clickable {
+                        modifier = Modifier.weight(1f).height(42.dp).clickable {
                             when (label) {
                                 "C" -> onClear()
                                 "⌫" -> onBackspace()
@@ -1284,7 +1295,7 @@ private fun CalculatorPad(
                                 else -> onToken(label)
                             }
                         },
-                        shape = RoundedCornerShape(22.dp),
+                        shape = RoundedCornerShape(21.dp),
                         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                         color = MaterialTheme.colorScheme.surface
                     ) {
