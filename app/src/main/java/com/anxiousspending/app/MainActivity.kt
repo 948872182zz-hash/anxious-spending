@@ -776,9 +776,8 @@ private fun CompactDateField(
     onValueChange: (String) -> Unit,
     onImeAction: () -> Unit
 ) {
-    val shape = RoundedCornerShape(8.dp)
     Box(
-        modifier = Modifier.width(width.dp).height(34.dp).border(1.dp, MaterialTheme.colorScheme.outline, shape),
+        modifier = Modifier.width(width.dp).height(30.dp),
         contentAlignment = Alignment.Center
     ) {
         BasicTextField(
@@ -793,7 +792,14 @@ private fun CompactDateField(
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = imeAction),
             keyboardActions = KeyboardActions(onNext = { onImeAction() }, onDone = { onImeAction() }),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 3.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 3.dp, vertical = 2.dp)
+        )
+        HorizontalDivider(
+            modifier = Modifier.align(Alignment.BottomCenter),
+            thickness = 1.dp,
+            color = MaterialTheme.colorScheme.outline
         )
     }
 }
@@ -1092,17 +1098,16 @@ internal fun ExpenseDialog(
                                     } else false
                                 }
                         )
-                        Text(
-                            "备注",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier
-                                .align(Alignment.TopStart)
-                                .padding(start = 8.dp)
-                                .offset(y = (-7).dp)
-                                .background(MaterialTheme.colorScheme.surface)
-                                .padding(horizontal = 2.dp)
-                        )
+                        if (note.isBlank()) {
+                            Text(
+                                "备注",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier
+                                    .align(Alignment.CenterStart)
+                                    .padding(start = 10.dp)
+                            )
+                        }
                         Box(
                             modifier = Modifier
                                 .align(Alignment.CenterEnd)
@@ -1270,8 +1275,8 @@ private fun CalculatorPad(
         rows.forEach { row ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 row.forEach { label ->
-                    Surface(
-                        modifier = Modifier.weight(1f).height(44.dp).clickable {
+                    OutlinedButton(
+                        onClick = {
                             when (label) {
                                 "C" -> onClear()
                                 "⌫" -> onBackspace()
@@ -1279,13 +1284,11 @@ private fun CalculatorPad(
                                 else -> onToken(label)
                             }
                         },
+                        modifier = Modifier.weight(1f).height(44.dp),
                         shape = RoundedCornerShape(22.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                        color = MaterialTheme.colorScheme.surface
+                        contentPadding = PaddingValues(0.dp)
                     ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(label, color = MaterialTheme.colorScheme.primary)
-                        }
+                        Text(label, color = MaterialTheme.colorScheme.primary)
                     }
                 }
                 repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
