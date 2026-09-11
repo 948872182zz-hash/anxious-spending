@@ -45,7 +45,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.zIndex
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -984,30 +983,19 @@ internal fun ExpenseDialog(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
                         keyboardActions = KeyboardActions(onDone = { finishEditing() }),
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp, max = 58.dp)
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
 
                 item {
                     CalculatorPad(
-                        onToken = { token ->
-                            focusManager.clearFocus(force = true)
-                            appendToken(token)
-                        },
-                        onClear = {
-                            focusManager.clearFocus(force = true)
-                            expression = ""
-                            calculatorError = false
-                        },
+                        onToken = ::appendToken,
+                        onClear = { expression = "" },
                         onBackspace = {
-                            focusManager.clearFocus(force = true)
                             if (expression.isNotEmpty()) expression = expression.dropLast(1)
                             calculatorError = false
                         },
-                        onEquals = {
-                            focusManager.clearFocus(force = true)
-                            calculate()
-                        }
+                        onEquals = ::calculate
                     )
                 }
 
@@ -1288,7 +1276,7 @@ private fun CalculatorPad(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 row.forEach { label ->
                     Surface(
-                        onClick = {
+                        modifier = Modifier.weight(1f).height(44.dp).clickable {
                             when (label) {
                                 "C" -> onClear()
                                 "⌫" -> onBackspace()
@@ -1296,10 +1284,6 @@ private fun CalculatorPad(
                                 else -> onToken(label)
                             }
                         },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(44.dp)
-                            .zIndex(2f),
                         shape = RoundedCornerShape(22.dp),
                         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                         color = MaterialTheme.colorScheme.surface
