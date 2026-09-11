@@ -45,6 +45,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -989,13 +990,24 @@ internal fun ExpenseDialog(
 
                 item {
                     CalculatorPad(
-                        onToken = ::appendToken,
-                        onClear = { expression = "" },
+                        onToken = { token ->
+                            focusManager.clearFocus(force = true)
+                            appendToken(token)
+                        },
+                        onClear = {
+                            focusManager.clearFocus(force = true)
+                            expression = ""
+                            calculatorError = false
+                        },
                         onBackspace = {
+                            focusManager.clearFocus(force = true)
                             if (expression.isNotEmpty()) expression = expression.dropLast(1)
                             calculatorError = false
                         },
-                        onEquals = ::calculate
+                        onEquals = {
+                            focusManager.clearFocus(force = true)
+                            calculate()
+                        }
                     )
                 }
 
@@ -1275,7 +1287,7 @@ private fun CalculatorPad(
         rows.forEach { row ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 row.forEach { label ->
-                    OutlinedButton(
+                    Surface(
                         onClick = {
                             when (label) {
                                 "C" -> onClear()
@@ -1284,11 +1296,17 @@ private fun CalculatorPad(
                                 else -> onToken(label)
                             }
                         },
-                        modifier = Modifier.weight(1f).height(44.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp)
+                            .zIndex(2f),
                         shape = RoundedCornerShape(22.dp),
-                        contentPadding = PaddingValues(0.dp)
+                        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                        color = MaterialTheme.colorScheme.surface
                     ) {
-                        Text(label, color = MaterialTheme.colorScheme.primary)
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(label, color = MaterialTheme.colorScheme.primary)
+                        }
                     }
                 }
                 repeat(4 - row.size) { Spacer(Modifier.weight(1f)) }
