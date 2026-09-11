@@ -454,34 +454,54 @@ private fun LedgerPage(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            OutlinedTextField(
-                value = query,
-                onValueChange = {
-                    onQueryChange(it)
-                    scope.launch { listState.scrollToItem(0) }
-                },
-                modifier = Modifier.fillMaxWidth().height(48.dp),
-                singleLine = true,
-                trailingIcon = {
-                    if (query.isNotEmpty()) {
-                        TextButton(
-                            onClick = {
+            Box(
+                modifier = Modifier
+                    .width(300.dp)
+                    .height(34.dp)
+                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp)),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                BasicTextField(
+                    value = query,
+                    onValueChange = {
+                        onQueryChange(it)
+                        scope.launch { listState.scrollToItem(0) }
+                    },
+                    singleLine = true,
+                    textStyle = TextStyle(
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = MaterialTheme.typography.bodyMedium.fontSize
+                    ),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 10.dp, end = if (query.isNotEmpty()) 34.dp else 10.dp)
+                )
+                if (query.isNotEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .size(32.dp)
+                            .clickable {
                                 onQueryChange("")
                                 scope.launch { listState.scrollToItem(0) }
-                            }
-                        ) { Text("×") }
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("×", fontWeight = FontWeight.Bold)
                     }
                 }
-            )
+            }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Box(Modifier.width(132.dp)) {
+                Box(Modifier.width(120.dp)) {
                     OutlinedButton(
                         onClick = { yearMenuOpen = true },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().height(32.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                     ) {
                         Text(if (selectedYear == 0) "全部年份" else "${selectedYear}年")
                     }
@@ -510,10 +530,11 @@ private fun LedgerPage(
                     }
                 }
 
-                Box(Modifier.width(132.dp)) {
+                Box(Modifier.width(120.dp)) {
                     OutlinedButton(
                         onClick = { monthMenuOpen = true },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().height(32.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                     ) {
                         Text(if (selectedMonth == 0) "全部月份" else "${selectedMonth}月")
                     }
@@ -751,7 +772,7 @@ private fun CompactDateField(
 ) {
     val shape = RoundedCornerShape(8.dp)
     Box(
-        modifier = Modifier.width(width.dp).height(34.dp).border(1.dp, MaterialTheme.colorScheme.outline, shape),
+        modifier = Modifier.width(width.dp).height(30.dp).border(1.dp, MaterialTheme.colorScheme.outline, shape),
         contentAlignment = Alignment.Center
     ) {
         BasicTextField(
@@ -887,15 +908,18 @@ internal fun ExpenseDialog(
                 dialogView.post { inputMethodManager.hideSoftInputFromWindow(dialogView.windowToken, 0) }
             }
 
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            LazyColumn(
+                modifier = Modifier.height(560.dp),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
                 item {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (entryType == "expense") {
-                            Button(onClick = { selectEntryType("expense") }, modifier = Modifier.weight(1f).height(38.dp)) { Text("支出") }
-                            OutlinedButton(onClick = { selectEntryType("income") }, modifier = Modifier.weight(1f).height(38.dp)) { Text("收入") }
+                            Button(onClick = { selectEntryType("expense") }, modifier = Modifier.weight(1f).height(32.dp)) { Text("支出") }
+                            OutlinedButton(onClick = { selectEntryType("income") }, modifier = Modifier.weight(1f).height(32.dp)) { Text("收入") }
                         } else {
-                            OutlinedButton(onClick = { selectEntryType("expense") }, modifier = Modifier.weight(1f).height(38.dp)) { Text("支出") }
-                            Button(onClick = { selectEntryType("income") }, modifier = Modifier.weight(1f).height(38.dp)) { Text("收入") }
+                            OutlinedButton(onClick = { selectEntryType("expense") }, modifier = Modifier.weight(1f).height(32.dp)) { Text("支出") }
+                            Button(onClick = { selectEntryType("income") }, modifier = Modifier.weight(1f).height(32.dp)) { Text("收入") }
                         }
                     }
                 }
@@ -967,7 +991,7 @@ internal fun ExpenseDialog(
                         Box {
                             OutlinedButton(
                                 onClick = { categoryMenu = true },
-                                modifier = Modifier.fillMaxWidth().height(40.dp),
+                                modifier = Modifier.fillMaxWidth().height(32.dp),
                                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
                             ) {
                                 Text(
@@ -1003,7 +1027,7 @@ internal fun ExpenseDialog(
                     Box {
                         OutlinedButton(
                             onClick = { paymentSourceMenu = true },
-                            modifier = Modifier.fillMaxWidth().height(40.dp),
+                            modifier = Modifier.fillMaxWidth().height(32.dp),
                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1033,26 +1057,60 @@ internal fun ExpenseDialog(
                 }
 
                 item {
-                    OutlinedTextField(
-                        value = note,
-                        onValueChange = { note = it },
-                        label = { Text("备注") },
-                        trailingIcon = { IconButton(onClick = { finishEditing() }) { Text("✓", fontWeight = FontWeight.Bold) } },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(onDone = { finishEditing() }),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth().onPreviewKeyEvent { event ->
-                            if (event.type == KeyEventType.KeyDown && event.key == Key.Enter) {
-                                finishEditing()
-                                true
-                            } else false
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(38.dp)
+                            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp)),
+                        contentAlignment = Alignment.CenterStart
+                    ) {
+                        BasicTextField(
+                            value = note,
+                            onValueChange = { note = it },
+                            singleLine = true,
+                            textStyle = TextStyle(
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontSize = MaterialTheme.typography.bodyMedium.fontSize
+                            ),
+                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(onDone = { finishEditing() }),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 10.dp, end = 38.dp)
+                                .onPreviewKeyEvent { event ->
+                                    if (event.type == KeyEventType.KeyDown && event.key == Key.Enter) {
+                                        finishEditing()
+                                        true
+                                    } else false
+                                }
+                        )
+                        Text(
+                            "备注",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .padding(start = 8.dp)
+                                .offset(y = (-7).dp)
+                                .background(MaterialTheme.colorScheme.surface)
+                                .padding(horizontal = 2.dp)
+                        )
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .size(36.dp)
+                                .clickable { finishEditing() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("✓", fontWeight = FontWeight.Bold)
                         }
-                    )
+                    }
                 }
 
                 item {
                     Row(
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 32.dp),
+                        modifier = Modifier.fillMaxWidth().height(30.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text("常用备注", style = MaterialTheme.typography.labelSmall)
@@ -1072,7 +1130,8 @@ internal fun ExpenseDialog(
                                             onNoteTagClick(suggestion.category, suggestion.text)
                                             finishEditing()
                                         },
-                                        label = { Text("${suggestion.text} · ${suggestion.count}次") }
+                                        label = { Text("${suggestion.text} · ${suggestion.count}次") },
+                                        modifier = Modifier.height(28.dp)
                                     )
                                 }
                             }
@@ -1202,7 +1261,7 @@ private fun CalculatorPad(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 row.forEach { label ->
                     Surface(
-                        modifier = Modifier.weight(1f).height(34.dp).clickable {
+                        modifier = Modifier.weight(1f).height(40.dp).clickable {
                             when (label) {
                                 "C" -> onClear()
                                 "⌫" -> onBackspace()
@@ -1210,7 +1269,7 @@ private fun CalculatorPad(
                                 else -> onToken(label)
                             }
                         },
-                        shape = RoundedCornerShape(17.dp),
+                        shape = RoundedCornerShape(20.dp),
                         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                         color = MaterialTheme.colorScheme.surface
                     ) {
