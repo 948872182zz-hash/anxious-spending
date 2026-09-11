@@ -454,13 +454,17 @@ private fun LedgerPage(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .width(300.dp)
-                    .height(34.dp)
-                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp)),
-                contentAlignment = Alignment.CenterStart
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center
             ) {
+                Box(
+                    modifier = Modifier
+                        .width(300.dp)
+                        .height(34.dp)
+                        .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp)),
+                    contentAlignment = Alignment.CenterStart
+                ) {
                 BasicTextField(
                     value = query,
                     onValueChange = {
@@ -491,17 +495,18 @@ private fun LedgerPage(
                         Text("×", fontWeight = FontWeight.Bold)
                     }
                 }
+                }
             }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally)
             ) {
-                Box(Modifier.width(120.dp)) {
+                Box(Modifier.width(108.dp)) {
                     OutlinedButton(
                         onClick = { yearMenuOpen = true },
-                        modifier = Modifier.fillMaxWidth().height(32.dp),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                        modifier = Modifier.fillMaxWidth().height(28.dp),
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
                     ) {
                         Text(if (selectedYear == 0) "全部年份" else "${selectedYear}年")
                     }
@@ -530,11 +535,11 @@ private fun LedgerPage(
                     }
                 }
 
-                Box(Modifier.width(120.dp)) {
+                Box(Modifier.width(108.dp)) {
                     OutlinedButton(
                         onClick = { monthMenuOpen = true },
-                        modifier = Modifier.fillMaxWidth().height(32.dp),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                        modifier = Modifier.fillMaxWidth().height(28.dp),
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
                     ) {
                         Text(if (selectedMonth == 0) "全部月份" else "${selectedMonth}月")
                     }
@@ -772,7 +777,7 @@ private fun CompactDateField(
 ) {
     val shape = RoundedCornerShape(8.dp)
     Box(
-        modifier = Modifier.width(width.dp).height(30.dp).border(1.dp, MaterialTheme.colorScheme.outline, shape),
+        modifier = Modifier.width(width.dp).height(28.dp).border(1.dp, MaterialTheme.colorScheme.outline, shape),
         contentAlignment = Alignment.Center
     ) {
         BasicTextField(
@@ -889,6 +894,7 @@ internal fun ExpenseDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        modifier = Modifier.heightIn(min = 680.dp, max = 680.dp),
         title = { Text(if (initialExpense == null) "记一笔" else "修改这笔") },
         text = {
             val focusManager = LocalFocusManager.current
@@ -909,17 +915,17 @@ internal fun ExpenseDialog(
             }
 
             LazyColumn(
-                modifier = Modifier.height(560.dp),
+                modifier = Modifier.height(520.dp),
                 verticalArrangement = Arrangement.spacedBy(3.dp)
             ) {
                 item {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (entryType == "expense") {
-                            Button(onClick = { selectEntryType("expense") }, modifier = Modifier.weight(1f).height(32.dp)) { Text("支出") }
-                            OutlinedButton(onClick = { selectEntryType("income") }, modifier = Modifier.weight(1f).height(32.dp)) { Text("收入") }
+                            Button(onClick = { selectEntryType("expense") }, modifier = Modifier.weight(1f).height(30.dp), contentPadding = PaddingValues(vertical = 0.dp)) { Text("支出") }
+                            OutlinedButton(onClick = { selectEntryType("income") }, modifier = Modifier.weight(1f).height(30.dp), contentPadding = PaddingValues(vertical = 0.dp)) { Text("收入") }
                         } else {
-                            OutlinedButton(onClick = { selectEntryType("expense") }, modifier = Modifier.weight(1f).height(32.dp)) { Text("支出") }
-                            Button(onClick = { selectEntryType("income") }, modifier = Modifier.weight(1f).height(32.dp)) { Text("收入") }
+                            OutlinedButton(onClick = { selectEntryType("expense") }, modifier = Modifier.weight(1f).height(30.dp), contentPadding = PaddingValues(vertical = 0.dp)) { Text("支出") }
+                            Button(onClick = { selectEntryType("income") }, modifier = Modifier.weight(1f).height(30.dp), contentPadding = PaddingValues(vertical = 0.dp)) { Text("收入") }
                         }
                     }
                 }
@@ -991,7 +997,7 @@ internal fun ExpenseDialog(
                         Box {
                             OutlinedButton(
                                 onClick = { categoryMenu = true },
-                                modifier = Modifier.fillMaxWidth().height(32.dp),
+                                modifier = Modifier.fillMaxWidth().height(28.dp),
                                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
                             ) {
                                 Text(
@@ -1060,7 +1066,7 @@ internal fun ExpenseDialog(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(38.dp)
+                            .height(32.dp)
                             .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp)),
                         contentAlignment = Alignment.CenterStart
                     ) {
@@ -1099,7 +1105,7 @@ internal fun ExpenseDialog(
                         Box(
                             modifier = Modifier
                                 .align(Alignment.CenterEnd)
-                                .size(36.dp)
+                                .size(30.dp)
                                 .clickable { finishEditing() },
                             contentAlignment = Alignment.Center
                         ) {
@@ -1131,7 +1137,7 @@ internal fun ExpenseDialog(
                                             finishEditing()
                                         },
                                         label = { Text("${suggestion.text} · ${suggestion.count}次") },
-                                        modifier = Modifier.height(28.dp)
+                                        modifier = Modifier.height(26.dp)
                                     )
                                 }
                             }
@@ -1194,15 +1200,18 @@ internal fun ExpenseDialog(
                             TextButton(
                                 enabled = parsedDate != null,
                                 onClick = { parsedDate?.let { setDateParts(it.minusDays(1)) } },
+                                modifier = Modifier.height(30.dp),
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                             ) { Text("−1天") }
                             TextButton(
                                 onClick = { setDateParts(LocalDate.now()) },
+                                modifier = Modifier.height(30.dp),
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                             ) { Text("今天") }
                             TextButton(
                                 enabled = parsedDate != null,
                                 onClick = { parsedDate?.let { setDateParts(it.plusDays(1)) } },
+                                modifier = Modifier.height(30.dp),
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                             ) { Text("+1天") }
                         }
@@ -1261,7 +1270,7 @@ private fun CalculatorPad(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 row.forEach { label ->
                     Surface(
-                        modifier = Modifier.weight(1f).height(40.dp).clickable {
+                        modifier = Modifier.weight(1f).height(44.dp).clickable {
                             when (label) {
                                 "C" -> onClear()
                                 "⌫" -> onBackspace()
@@ -1269,7 +1278,7 @@ private fun CalculatorPad(
                                 else -> onToken(label)
                             }
                         },
-                        shape = RoundedCornerShape(20.dp),
+                        shape = RoundedCornerShape(22.dp),
                         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                         color = MaterialTheme.colorScheme.surface
                     ) {
