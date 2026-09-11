@@ -347,7 +347,7 @@ fun AnxiousSpendingApp(
                     onEdit = { pendingEdit = it },
                     onDelete = { pendingDelete = it }
                 )
-            } else AnalyticsHub(entries)
+            } else AnalyticsHub(entries, onEditEntry = { pendingEdit = it })
         }
     }
 
@@ -460,10 +460,8 @@ private fun LedgerPage(
                     onQueryChange(it)
                     scope.launch { listState.scrollToItem(0) }
                 },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().height(48.dp),
                 singleLine = true,
-                label = { Text("搜索记录") },
-                placeholder = { Text("分类 / 备注 / yyyymmdd；多个关键词用空格") },
                 trailingIcon = {
                     if (query.isNotEmpty()) {
                         TextButton(
@@ -480,7 +478,7 @@ private fun LedgerPage(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Box(Modifier.weight(1f)) {
+                Box(Modifier.width(132.dp)) {
                     OutlinedButton(
                         onClick = { yearMenuOpen = true },
                         modifier = Modifier.fillMaxWidth()
@@ -512,7 +510,7 @@ private fun LedgerPage(
                     }
                 }
 
-                Box(Modifier.weight(1f)) {
+                Box(Modifier.width(132.dp)) {
                     OutlinedButton(
                         onClick = { monthMenuOpen = true },
                         modifier = Modifier.fillMaxWidth()
@@ -774,7 +772,7 @@ private fun CompactDateField(
 }
 
 @Composable
-private fun ExpenseDialog(
+fun ExpenseDialog(
     initialExpense: Expense?,
     noteSuggestions: List<NoteSuggestion>,
     rateSnapshot: ExchangeRateSnapshot?,
