@@ -106,7 +106,7 @@ private fun stableNotePairs(entries: List<Expense>): Set<Pair<String, String>> =
         .keys
 
 @Composable
-fun AnalyticsHub(entries: List<Expense>) {
+fun AnalyticsHub(entries: List<Expense>, onEditEntry: (Expense) -> Unit) {
     val today = LocalDate.now()
     var module by remember { mutableIntStateOf(0) }
     var timeMode by remember { mutableIntStateOf(0) } // 0 month, 1 year, 2 custom
@@ -161,7 +161,7 @@ fun AnalyticsHub(entries: List<Expense>) {
 
         Box(Modifier.fillMaxSize()) {
             when (module) {
-                0 -> StatisticsModule(entries, activeWindow)
+                0 -> StatisticsModule(entries, activeWindow, onEditEntry)
                 1 -> DataAnalysisModule(entries, activeWindow)
                 else -> FinancialReportModule(entries)
             }
@@ -279,7 +279,7 @@ private fun parseAnalyticsDate(y: String, m: String, d: String): LocalDate? {
 }
 
 @Composable
-private fun StatisticsModule(entries: List<Expense>, window: AnalyticsWindow?) {
+private fun StatisticsModule(entries: List<Expense>, window: AnalyticsWindow?, onEditEntry: (Expense) -> Unit) {
     if (window == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("自定义日期还没填对。") }
         return
@@ -301,14 +301,16 @@ private fun StatisticsModule(entries: List<Expense>, window: AnalyticsWindow?) {
             RawLedgerDrilldown(
                 title = globalDetailNote ?: "明细",
                 entries = activeExpenses.filter { it.note.trim() == globalDetailNote },
-                onBack = { globalDetailNote = null }
+                onBack = { globalDetailNote = null },
+                onEditEntry = onEditEntry
             )
         }
         selectedCategory != null && detailNote != null -> {
             RawLedgerDrilldown(
                 title = "${analyticsCategoryName(selectedCategory!!)} · $detailNote",
                 entries = activeExpenses.filter { it.category == selectedCategory && it.note.trim() == detailNote },
-                onBack = { detailNote = null }
+                onBack = { detailNote = null },
+                onEditEntry = onEditEntry
             )
         }
         selectedCategory != null -> {
@@ -665,7 +667,12 @@ private fun AnalyticsLineChart(points: List<TrendPoint>) {
 }
 
 @Composable
-private fun RawLedgerDrilldown(title: String, entries: List<Expense>, onBack: () -> Unit) {
+private fun RawLedgerDrilldown(
+    title: String,
+    entries: List<Expense>,
+    onBack: () -> Unit,
+    onEditEntry: (Expense) -> Unit = {}
+) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
@@ -685,7 +692,9 @@ private fun RawLedgerDrilldown(title: String, entries: List<Expense>, onBack: ()
             item { Text("没有对应账单。") }
         } else {
             items(entries.sortedWith(compareByDescending<Expense> { it.date }.thenByDescending { it.cnyAmount }), key = { it.id }) { entry ->
-                ElevatedCard(Modifier.fillMaxWidth()) {
+                ElevatedCard(
+                    modifier = Modifier.fillMaxWidth().clickable { onEditEntry(entry) }
+                ) {
                     Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(entry.note.ifBlank { analyticsCategoryName(entry.category) }, fontWeight = FontWeight.SemiBold)
