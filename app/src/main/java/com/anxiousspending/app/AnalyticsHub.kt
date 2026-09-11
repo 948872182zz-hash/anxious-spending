@@ -137,9 +137,9 @@ fun AnalyticsHub(entries: List<Expense>, onEditEntry: (Expense) -> Unit) {
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            AnalyticsModuleButton("数据统计", module == 0, { module = 0 }, Modifier.width(104.dp))
-            AnalyticsModuleButton("数据分析", module == 1, { module = 1 }, Modifier.width(104.dp))
-            AnalyticsModuleButton("财报", module == 2, { module = 2 }, Modifier.width(88.dp))
+            AnalyticsModuleButton("数据统计", module == 0, { module = 0 }, Modifier.weight(1f))
+            AnalyticsModuleButton("数据分析", module == 1, { module = 1 }, Modifier.weight(1f))
+            AnalyticsModuleButton("财报", module == 2, { module = 2 }, Modifier.weight(1f))
         }
 
         if (module != 2) {
@@ -172,9 +172,9 @@ fun AnalyticsHub(entries: List<Expense>, onEditEntry: (Expense) -> Unit) {
 @Composable
 private fun AnalyticsModuleButton(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     if (selected) {
-        Button(onClick = onClick, modifier = modifier.height(38.dp), contentPadding = PaddingValues(horizontal = 6.dp)) { Text(label) }
+        Button(onClick = onClick, modifier = modifier.height(32.dp), contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)) { Text(label) }
     } else {
-        OutlinedButton(onClick = onClick, modifier = modifier.height(38.dp), contentPadding = PaddingValues(horizontal = 6.dp)) { Text(label) }
+        OutlinedButton(onClick = onClick, modifier = modifier.height(32.dp), contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)) { Text(label) }
     }
 }
 
@@ -197,11 +197,10 @@ private fun AnalyticsTimeFilter(
         Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 listOf("月", "年", "自定义").forEachIndexed { index, label ->
-                    val buttonWidth = if (index == 2) 96.dp else 88.dp
                     if (timeMode == index) {
-                        Button(onClick = { onTimeMode(index) }, modifier = Modifier.width(buttonWidth).height(34.dp), contentPadding = PaddingValues(0.dp)) { Text(label) }
+                        Button(onClick = { onTimeMode(index) }, modifier = Modifier.weight(1f).height(30.dp), contentPadding = PaddingValues(0.dp)) { Text(label) }
                     } else {
-                        OutlinedButton(onClick = { onTimeMode(index) }, modifier = Modifier.width(buttonWidth).height(34.dp), contentPadding = PaddingValues(0.dp)) { Text(label) }
+                        OutlinedButton(onClick = { onTimeMode(index) }, modifier = Modifier.weight(1f).height(30.dp), contentPadding = PaddingValues(0.dp)) { Text(label) }
                     }
                 }
             }
@@ -325,6 +324,7 @@ private fun StatisticsModule(entries: List<Expense>, window: AnalyticsWindow?, o
                 onView = { categoryView = it },
                 onTrendNote = { trendNote = it },
                 onNoteDetail = { detailNote = it },
+                onEditEntry = onEditEntry,
                 onBack = { selectedCategory = null; detailNote = null; trendNote = null }
             )
         }
@@ -608,10 +608,16 @@ private fun CategorySecondLayer(
     onView: (Int) -> Unit,
     onTrendNote: (String?) -> Unit,
     onNoteDetail: (String) -> Unit,
+    onEditEntry: (Expense) -> Unit,
     onBack: () -> Unit
 ) {
     if (category == "books") {
-        RawLedgerDrilldown("书籍 · ${window.label}", activeExpenses, onBack)
+        RawLedgerDrilldown(
+            title = "书籍 · ${window.label}",
+            entries = activeExpenses,
+            onBack = onBack,
+            onEditEntry = onEditEntry
+        )
         return
     }
 
@@ -644,8 +650,8 @@ private fun CategorySecondLayer(
         }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                AnalyticsModuleButton("A · 备注金额", view == 0, { onView(0) }, Modifier.width(150.dp))
-                AnalyticsModuleButton("B · 时间趋势", view == 1, { onView(1) }, Modifier.width(150.dp))
+                AnalyticsModuleButton("A · 备注金额", view == 0, { onView(0) }, Modifier.weight(1f))
+                AnalyticsModuleButton("B · 时间趋势", view == 1, { onView(1) }, Modifier.weight(1f))
             }
         }
         if (view == 0) {
