@@ -11,8 +11,10 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -22,6 +24,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
@@ -46,6 +49,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.UUID
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -245,6 +249,16 @@ fun AnxiousSpendingApp(
     var noteTagClicks by remember { mutableStateOf(noteTagStore.loadClickCounts()) }
     var rateSnapshot by remember { mutableStateOf(exchangeRateStore.load()) }
     var page by remember { mutableIntStateOf(0) }
+    var ledgerSearch by rememberSaveable { mutableStateOf("") }
+    var ledgerYear by rememberSaveable { mutableIntStateOf(0) }
+    var ledgerMonth by rememberSaveable { mutableIntStateOf(0) }
+    val ledgerListState = rememberLazyListState()
+    val appScope = rememberCoroutineScope()
+    val showBackToTop by remember {
+        derivedStateOf {
+            ledgerListState.firstVisibleItemIndex > 0 || ledgerListState.firstVisibleItemScrollOffset > 240
+        }
+    }
     var showAdd by remember { mutableStateOf(false) }
     var showImport by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<Expense?>(null) }
@@ -300,14 +314,40 @@ fun AnxiousSpendingApp(
             }
         },
         floatingActionButton = {
-            if (page == 0) FloatingActionButton(onClick = { showAdd = true }) {
-                Icon(Icons.Default.Add, contentDescription = "新增记录")
+            if (page == 0) {
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (showBackToTop) {
+                        SmallFloatingActionButton(
+                            onClick = { appScope.launch { ledgerListState.animateScrollToItem(0) } }
+                        ) {
+                            Text("↑", style = MaterialTheme.typography.titleLarge)
+                        }
+                    }
+                    FloatingActionButton(onClick = { showAdd = true }) {
+                        Icon(Icons.Default.Add, contentDescription = "新增记录")
+                    }
+                }
             }
         }
     ) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
-            if (page == 0) LedgerPage(entries, { pendingEdit = it }, { pendingDelete = it })
-            else AnalyticsHub(entries)
+            if (page == 0) {
+                LedgerPage(
+                    entries = entries,
+                    query = ledgerSearch,
+                    onQueryChange = { ledgerSearch = it },
+                    selectedYear = ledgerYear,
+                    onYearChange = { ledgerYear = it },
+                    selectedMonth = ledgerMonth,
+                    onMonthChange = { ledgerMonth = it },
+                    listState = ledgerListState,
+                    onEdit = { pendingEdit = it },
+                    onDelete = { pendingDelete = it }
+                )
+            } else AnalyticsHub(entries)
         }
     }
 
@@ -366,73 +406,228 @@ fun AnxiousSpendingApp(
 @Composable
 private fun LedgerPage(
     entries: List<Expense>,
+    query: String,
+    onQueryChange: (String) -> Unit,
+    selectedYear: Int,
+    onYearChange: (Int) -> Unit,
+    selectedMonth: Int,
+    onMonthChange: (Int) -> Unit,
+    listState: LazyListState,
     onEdit: (Expense) -> Unit,
     onDelete: (Expense) -> Unit
 ) {
-    if (entries.isEmpty()) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("还没有账。先记一笔再说。")
+    val scope = rememberCoroutineScope()
+    var yearMenuOpen by remember { mutableStateOf(false) }
+    var monthMenuOpen by remember { mutableStateOf(false) }
+
+    val availableYears = remember(entries) {
+        entries.map { it.date.year }.distinct().sortedDescending()
+    }
+    val searchTokens = remember(query) {
+        query.trim()
+            .split(Regex("\\s+"))
+            .map { it.trim().lowercase() }
+            .filter { it.isNotEmpty() }
+    }
+    val compactDateFormatter = remember { DateTimeFormatter.ofPattern("yyyyMMdd") }
+
+    val filteredEntries = remember(entries, searchTokens, selectedYear, selectedMonth) {
+        entries.filter { entry ->
+            val yearMatches = selectedYear == 0 || entry.date.year == selectedYear
+            val monthMatches = selectedMonth == 0 || entry.date.monthValue == selectedMonth
+            val searchable = buildString {
+                append(categoryName(entry.category))
+                append(' ')
+                append(categorySubtitle(entry.category))
+                append(' ')
+                append(entry.note)
+                append(' ')
+                append(entry.date.format(compactDateFormatter))
+            }.lowercase()
+            val searchMatches = searchTokens.all { token -> searchable.contains(token) }
+            yearMatches && monthMatches && searchMatches
         }
-        return
     }
 
-    val grouped = entries.groupBy { it.date }.toSortedMap(compareByDescending { it })
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        grouped.forEach { (date, dayEntries) ->
-            item(key = "day-$date") {
-                val expenseTotal = dayEntries.filter { it.entryType == "expense" }.sumOf { it.cnyAmount }
-                val incomeTotal = dayEntries.filter { it.entryType == "income" }.sumOf { it.cnyAmount }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(date.format(DateTimeFormatter.ofPattern("M月d日 EEE")), fontWeight = FontWeight.Bold)
-                    Text(
-                        when {
-                            incomeTotal > 0.0 && expenseTotal > 0.0 -> "支 ¥%.2f · 收 ¥%.2f".format(expenseTotal, incomeTotal)
-                            incomeTotal > 0.0 -> "收 ¥%.2f".format(incomeTotal)
-                            else -> "¥%.2f".format(expenseTotal)
+    Column(Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedTextField(
+                value = query,
+                onValueChange = {
+                    onQueryChange(it)
+                    scope.launch { listState.scrollToItem(0) }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text("搜索记录") },
+                placeholder = { Text("分类 / 备注 / yyyymmdd；多个关键词用空格") },
+                trailingIcon = {
+                    if (query.isNotEmpty()) {
+                        TextButton(
+                            onClick = {
+                                onQueryChange("")
+                                scope.launch { listState.scrollToItem(0) }
+                            }
+                        ) { Text("×") }
+                    }
+                }
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Box(Modifier.weight(1f)) {
+                    OutlinedButton(
+                        onClick = { yearMenuOpen = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (selectedYear == 0) "全部年份" else "${selectedYear}年")
+                    }
+                    DropdownMenu(
+                        expanded = yearMenuOpen,
+                        onDismissRequest = { yearMenuOpen = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("全部年份") },
+                            onClick = {
+                                onYearChange(0)
+                                yearMenuOpen = false
+                                scope.launch { listState.scrollToItem(0) }
+                            }
+                        )
+                        availableYears.forEach { year ->
+                            DropdownMenuItem(
+                                text = { Text("${year}年") },
+                                onClick = {
+                                    onYearChange(year)
+                                    yearMenuOpen = false
+                                    scope.launch { listState.scrollToItem(0) }
+                                }
+                            )
                         }
-                    )
+                    }
+                }
+
+                Box(Modifier.weight(1f)) {
+                    OutlinedButton(
+                        onClick = { monthMenuOpen = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (selectedMonth == 0) "全部月份" else "${selectedMonth}月")
+                    }
+                    DropdownMenu(
+                        expanded = monthMenuOpen,
+                        onDismissRequest = { monthMenuOpen = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("全部月份") },
+                            onClick = {
+                                onMonthChange(0)
+                                monthMenuOpen = false
+                                scope.launch { listState.scrollToItem(0) }
+                            }
+                        )
+                        (1..12).forEach { month ->
+                            DropdownMenuItem(
+                                text = { Text("${month}月") },
+                                onClick = {
+                                    onMonthChange(month)
+                                    monthMenuOpen = false
+                                    scope.launch { listState.scrollToItem(0) }
+                                }
+                            )
+                        }
+                    }
                 }
             }
 
-            items(dayEntries, key = { it.id }) { entry ->
-                ElevatedCard(Modifier.fillMaxWidth()) {
-                    Row(
-                        Modifier.fillMaxWidth().clickable { onEdit(entry) }
-                            .padding(start = 14.dp, top = 10.dp, bottom = 10.dp, end = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(categorySubtitle(entry.category), fontWeight = FontWeight.SemiBold)
-                            Spacer(Modifier.height(3.dp))
-                            val source = paymentSourceOption(entry.paymentSource)
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                if (entry.note.isNotBlank()) {
-                                    Text(entry.note, style = MaterialTheme.typography.bodySmall)
-                                    Spacer(Modifier.width(6.dp))
+            val filtersActive = query.isNotBlank() || selectedYear != 0 || selectedMonth != 0
+            if (filtersActive) {
+                Text(
+                    "找到 ${filteredEntries.size} 笔",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        if (entries.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("还没有账。先记一笔再说。")
+            }
+            return@Column
+        }
+
+        if (filteredEntries.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("没有匹配的记录。")
+            }
+            return@Column
+        }
+
+        val grouped = filteredEntries.groupBy { it.date }.toSortedMap(compareByDescending { it })
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 96.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            grouped.forEach { (date, dayEntries) ->
+                item(key = "day-${date}") {
+                    val expenseTotal = dayEntries.filter { it.entryType == "expense" }.sumOf { it.cnyAmount }
+                    val incomeTotal = dayEntries.filter { it.entryType == "income" }.sumOf { it.cnyAmount }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(date.format(DateTimeFormatter.ofPattern("M月d日 EEE")), fontWeight = FontWeight.Bold)
+                        Text(
+                            when {
+                                incomeTotal > 0.0 && expenseTotal > 0.0 -> "支 ¥%.2f · 收 ¥%.2f".format(expenseTotal, incomeTotal)
+                                incomeTotal > 0.0 -> "收 ¥%.2f".format(incomeTotal)
+                                else -> "¥%.2f".format(expenseTotal)
+                            }
+                        )
+                    }
+                }
+
+                items(dayEntries, key = { it.id }) { entry ->
+                    ElevatedCard(Modifier.fillMaxWidth()) {
+                        Row(
+                            Modifier.fillMaxWidth().clickable { onEdit(entry) }
+                                .padding(start = 14.dp, top = 10.dp, bottom = 10.dp, end = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(categorySubtitle(entry.category), fontWeight = FontWeight.SemiBold)
+                                Spacer(Modifier.height(3.dp))
+                                val source = paymentSourceOption(entry.paymentSource)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (entry.note.isNotBlank()) {
+                                        Text(entry.note, style = MaterialTheme.typography.bodySmall)
+                                        Spacer(Modifier.width(6.dp))
+                                    }
+                                    Text(source.dot, style = MaterialTheme.typography.bodySmall, color = source.color)
                                 }
-                                Text(source.dot, style = MaterialTheme.typography.bodySmall, color = source.color)
                             }
-                        }
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(
-                                formatOriginal(entry),
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (entry.entryType == "income") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                            )
-                            if (entry.currency != "CNY") {
+                            Column(horizontalAlignment = Alignment.End) {
                                 Text(
-                                    "≈ ${if (entry.entryType == "income") "+" else ""}¥${formatAmount(entry.cnyAmount)}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    formatOriginal(entry),
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (entry.entryType == "income") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                                 )
+                                if (entry.currency != "CNY") {
+                                    Text(
+                                        "≈ ${if (entry.entryType == "income") "+" else ""}¥${formatAmount(entry.cnyAmount)}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
-                        }
-                        IconButton(onClick = { onDelete(entry) }) {
-                            Icon(Icons.Default.Delete, contentDescription = "删除这笔")
+                            IconButton(onClick = { onDelete(entry) }) {
+                                Icon(Icons.Default.Delete, contentDescription = "删除这笔")
+                            }
                         }
                     }
                 }
