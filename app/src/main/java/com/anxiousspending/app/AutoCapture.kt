@@ -158,20 +158,7 @@ private val incomingKeywords = listOf(
     "退款",
     "退回",
     "收入",
-    "转入",
-    "收到转账",
-    "转账给你",
-    "向你转账",
-    "你收到",
-    "已收钱"
-)
-
-private val outgoingTransferPatterns = listOf(
-    Regex("""向.+转账"""),
-    Regex("""转账给.+"""),
-    Regex("""已转账"""),
-    Regex("""转账成功"""),
-    Regex("""成功转账""")
+    "转入"
 )
 
 private val amountPatterns = listOf(
@@ -181,10 +168,7 @@ private val amountPatterns = listOf(
 
 private fun extractPaymentAmount(text: String): Double? {
     if (incomingKeywords.any { text.contains(it) }) return null
-
-    val isNormalPayment = outgoingKeywords.any { text.contains(it) }
-    val isOutgoingTransfer = outgoingTransferPatterns.any { it.containsMatchIn(text) }
-    if (!isNormalPayment && !isOutgoingTransfer) return null
+    if (outgoingKeywords.none { text.contains(it) }) return null
 
     for (pattern in amountPatterns) {
         val match = pattern.find(text) ?: continue
