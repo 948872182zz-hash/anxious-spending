@@ -480,6 +480,83 @@ private fun AmountBarList(items: List<AmountItem>, onClick: ((AmountItem) -> Uni
 }
 
 @Composable
+private fun VerticalNoteBarChart(items: List<AmountItem>, onNoteClick: (String) -> Unit) {
+    if (items.isEmpty()) return
+
+    val maxValue = items.maxOf { it.amount }.takeIf { it > 0.0 } ?: 1.0
+    val barColor = MaterialTheme.colorScheme.primary
+    val axisColor = MaterialTheme.colorScheme.outline
+    val chartHeight = 190.dp
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            money(maxValue),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(chartHeight)
+        ) {
+            val bottom = size.height - 4f
+            val top = 8f
+            val usableHeight = bottom - top
+            val slotWidth = size.width / items.size.toFloat()
+            val barWidth = (slotWidth * 0.56f).coerceAtMost(64f)
+
+            drawLine(
+                color = axisColor,
+                start = Offset(0f, bottom),
+                end = Offset(size.width, bottom),
+                strokeWidth = 1.2f
+            )
+
+            items.forEachIndexed { index, item ->
+                val ratio = (item.amount / maxValue).toFloat().coerceIn(0f, 1f)
+                val left = slotWidth * index + (slotWidth - barWidth) / 2f
+                val barHeight = usableHeight * ratio
+                drawRoundRect(
+                    color = barColor,
+                    topLeft = Offset(left, bottom - barHeight),
+                    size = androidx.compose.ui.geometry.Size(barWidth, barHeight),
+                    cornerRadius = CornerRadius(8f, 8f)
+                )
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            items.forEach { item ->
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { onNoteClick(item.key) }
+                        .padding(horizontal = 1.dp, vertical = 2.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        item.label,
+                        style = MaterialTheme.typography.labelSmall,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2
+                    )
+                    Text(
+                        money(item.amount),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun CategoricalNoteLineChart(items: List<AmountItem>, onNoteClick: (String) -> Unit) {
     if (items.isEmpty()) return
     val maxValue = items.maxOf { it.amount }.takeIf { it > 0.0 } ?: 1.0
@@ -573,11 +650,11 @@ private fun CategorySecondLayer(
         }
         if (view == 0) {
             item {
-                AnalyticsSectionCard("常用备注金额对比", "按金额从高到低") {
+                AnalyticsSectionCard("常用备注金额对比", "x 轴是备注 · y 轴是金额") {
                     if (noteTotals.isEmpty()) {
                         Text("这个时间段没有可统计的常用备注。")
                     } else {
-                        AmountBarList(noteTotals) { item -> onNoteDetail(item.key) }
+                        VerticalNoteBarChart(noteTotals, onNoteDetail)
                     }
                 }
             }
