@@ -58,9 +58,10 @@ class MainActivity : ComponentActivity() {
         val expenseStore = ExpenseStore(this)
         val noteTagStore = NoteTagStore(this)
         val exchangeRateStore = ExchangeRateStore(this)
+        val captureStore = CaptureStore(this)
         setContent {
             MaterialTheme {
-                AnxiousSpendingApp(expenseStore, noteTagStore, exchangeRateStore)
+                AnxiousSpendingApp(expenseStore, noteTagStore, exchangeRateStore, captureStore)
             }
         }
     }
@@ -244,11 +245,14 @@ private fun evaluateExpression(raw: String): Double? {
 fun AnxiousSpendingApp(
     store: ExpenseStore,
     noteTagStore: NoteTagStore,
-    exchangeRateStore: ExchangeRateStore
+    exchangeRateStore: ExchangeRateStore,
+    captureStore: CaptureStore
 ) {
     var entries by remember { mutableStateOf(store.load()) }
     var noteTagClicks by remember { mutableStateOf(noteTagStore.loadClickCounts()) }
     var rateSnapshot by remember { mutableStateOf(exchangeRateStore.load()) }
+    val captureRevision = CaptureSignal.revision
+    val capturedItems = remember(captureRevision) { captureStore.load() }
     var page by remember { mutableIntStateOf(0) }
     var ledgerSearch by rememberSaveable { mutableStateOf("") }
     var ledgerYear by rememberSaveable { mutableIntStateOf(0) }
@@ -262,6 +266,8 @@ fun AnxiousSpendingApp(
     }
     var showAdd by remember { mutableStateOf(false) }
     var showImport by remember { mutableStateOf(false) }
+    var showCapture by remember { mutableStateOf(false) }
+    var pendingCapture by remember { mutableStateOf<CapturedPayment?>(null) }
     var pendingDelete by remember { mutableStateOf<Expense?>(null) }
     var pendingEdit by remember { mutableStateOf<Expense?>(null) }
 
@@ -293,6 +299,9 @@ fun AnxiousSpendingApp(
                 },
                 actions = {
                     if (page == 0) {
+                        TextButton(onClick = { showCapture = true }) {
+                            Text(if (capturedItems.isEmpty()) "自动" else "自动 ${capturedItems.size}")
+                        }
                         TextButton(onClick = { showImport = true }) { Text("导入") }
                     }
                 }
@@ -350,6 +359,47 @@ fun AnxiousSpendingApp(
                 )
             } else AnalyticsHub(entries, onEditEntry = { pendingEdit = it })
         }
+    }
+
+    if (showCapture) {
+        AutoCaptureDialog(
+            store = captureStore,
+            items = capturedItems,
+            onDismiss = { showCapture = false },
+            onUse = { item ->
+                pendingCapture = item
+                showCapture = false
+            }
+        )
+    }
+
+    pendingCapture?.let { captured ->
+        val capturedDate = Instant.ofEpochMilli(captured.occurredAtMillis)
+            .atZone(ZoneId.systemDefault())
+            .toLocalDate()
+        ExpenseDialog(
+            initialExpense = Expense(
+                id = "capture:${captured.id}",
+                amount = captured.amount,
+                category = "",
+                note = "",
+                date = capturedDate,
+                currency = "CNY",
+                exchangeRateToCny = 1.0,
+                cnyAmount = captured.amount,
+                paymentSource = captured.sourceKey,
+                entryType = "expense"
+            ),
+            noteSuggestions = noteSuggestions,
+            rateSnapshot = rateSnapshot,
+            onNoteTagClick = ::registerNoteTagClick,
+            onDismiss = { pendingCapture = null },
+            onSave = { completed ->
+                persist(entries + completed.copy(id = UUID.randomUUID().toString()))
+                captureStore.remove(captured.id)
+                pendingCapture = null
+            }
+        )
     }
 
     if (showImport) {
@@ -796,7 +846,15 @@ internal fun ExpenseDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         modifier = Modifier.heightIn(min = 742.dp, max = 742.dp),
-        title = { Text(if (initialExpense == null) "记一笔" else "修改这笔") },
+        title = {
+            Text(
+                when {
+                    initialExpense == null -> "记一笔"
+                    initialExpense.id.startsWith("capture:") -> "整理这笔"
+                    else -> "修改这笔"
+                }
+            )
+        },
         text = {
             val focusManager = LocalFocusManager.current
             val keyboardController = LocalSoftwareKeyboardController.current
