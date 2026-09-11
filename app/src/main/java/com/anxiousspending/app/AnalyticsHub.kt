@@ -137,9 +137,9 @@ fun AnalyticsHub(entries: List<Expense>, onEditEntry: (Expense) -> Unit) {
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            AnalyticsModuleButton("数据统计", module == 0, { module = 0 }, Modifier.weight(1f))
-            AnalyticsModuleButton("数据分析", module == 1, { module = 1 }, Modifier.weight(1f))
-            AnalyticsModuleButton("财报", module == 2, { module = 2 }, Modifier.weight(1f))
+            AnalyticsModuleButton("数据统计", module == 0, { module = 0 }, Modifier.width(104.dp))
+            AnalyticsModuleButton("数据分析", module == 1, { module = 1 }, Modifier.width(104.dp))
+            AnalyticsModuleButton("财报", module == 2, { module = 2 }, Modifier.width(88.dp))
         }
 
         if (module != 2) {
@@ -197,10 +197,11 @@ private fun AnalyticsTimeFilter(
         Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 listOf("月", "年", "自定义").forEachIndexed { index, label ->
+                    val buttonWidth = if (index == 2) 96.dp else 88.dp
                     if (timeMode == index) {
-                        Button(onClick = { onTimeMode(index) }, modifier = Modifier.weight(1f).height(34.dp), contentPadding = PaddingValues(0.dp)) { Text(label) }
+                        Button(onClick = { onTimeMode(index) }, modifier = Modifier.width(buttonWidth).height(34.dp), contentPadding = PaddingValues(0.dp)) { Text(label) }
                     } else {
-                        OutlinedButton(onClick = { onTimeMode(index) }, modifier = Modifier.weight(1f).height(34.dp), contentPadding = PaddingValues(0.dp)) { Text(label) }
+                        OutlinedButton(onClick = { onTimeMode(index) }, modifier = Modifier.width(buttonWidth).height(34.dp), contentPadding = PaddingValues(0.dp)) { Text(label) }
                     }
                 }
             }
@@ -566,15 +567,18 @@ private fun CategorySecondLayer(
         }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                AnalyticsModuleButton("A · 备注金额", view == 0, { onView(0) }, Modifier.weight(1f))
-                AnalyticsModuleButton("B · 时间趋势", view == 1, { onView(1) }, Modifier.weight(1f))
+                AnalyticsModuleButton("A · 备注金额", view == 0, { onView(0) }, Modifier.width(150.dp))
+                AnalyticsModuleButton("B · 时间趋势", view == 1, { onView(1) }, Modifier.width(150.dp))
             }
         }
         if (view == 0) {
             item {
-                AnalyticsSectionCard("常用备注金额对比", "x 轴是备注 · y 轴是金额") {
-                    if (noteTotals.isEmpty()) Text("这个时间段没有可统计的常用备注。")
-                    else CategoricalNoteLineChart(noteTotals, onNoteDetail)
+                AnalyticsSectionCard("常用备注金额对比", "按金额从高到低") {
+                    if (noteTotals.isEmpty()) {
+                        Text("这个时间段没有可统计的常用备注。")
+                    } else {
+                        AmountBarList(noteTotals) { item -> onNoteDetail(item.key) }
+                    }
                 }
             }
         } else {
