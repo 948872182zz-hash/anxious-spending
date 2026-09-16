@@ -139,10 +139,11 @@ fun AnalyticsHub(entries: List<Expense>, onEditEntry: (Expense) -> Unit) {
         ) {
             AnalyticsModuleButton("数据统计", module == 0, { module = 0 }, Modifier.weight(1f))
             AnalyticsModuleButton("数据分析", module == 1, { module = 1 }, Modifier.weight(1f))
-            AnalyticsModuleButton("财报", module == 2, { module = 2 }, Modifier.weight(1f))
+            AnalyticsModuleButton("HOPE💹", module == 2, { module = 2 }, Modifier.weight(1f))
+            AnalyticsModuleButton("财报", module == 3, { module = 3 }, Modifier.weight(1f))
         }
 
-        if (module != 2) {
+        if (module != 2 && module != 3) {
             AnalyticsTimeFilter(
                 timeMode = timeMode,
                 selectedMonth = selectedMonth,
@@ -163,6 +164,7 @@ fun AnalyticsHub(entries: List<Expense>, onEditEntry: (Expense) -> Unit) {
             when (module) {
                 0 -> StatisticsModule(entries, activeWindow, onEditEntry)
                 1 -> DataAnalysisModule(entries, activeWindow)
+                2 -> HopeMarketModule()
                 else -> FinancialReportModule(entries)
             }
         }
