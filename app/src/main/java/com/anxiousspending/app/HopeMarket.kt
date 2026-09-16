@@ -1,6 +1,7 @@
 package com.anxiousspending.app
 
 import android.content.Context
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,7 +21,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -341,29 +341,15 @@ fun HopeMarketModule() {
     }
 }
 
-private class EditableHolding(
-    code: String,
-    shares: String,
-    name: String
-) {
-    val id: String = java.util.UUID.randomUUID().toString()
-    var code by mutableStateOf(code)
-    var shares by mutableStateOf(shares)
-    var name by mutableStateOf(name)
-}
-
 @Composable
 private fun HopeHoldingsEditor(
     initial: List<HopeHolding>,
     onDismiss: () -> Unit,
     onSave: (List<HopeHolding>) -> Unit
 ) {
-    val rows = remember {
-        mutableStateListOf<EditableHolding>().apply {
-            addAll(initial.map { EditableHolding(it.code, formatHopeShares(it.shares), it.fallbackName) })
-        }
-    }
-    var codeError by remember { mutableStateOf(false) }
+    var draft by remember { mutableStateOf(initial) }
+    var editingIndex by remember { mutableStateOf<Int?>(null) }
+    var addingNew by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -377,52 +363,28 @@ private fun HopeHoldingsEditor(
             ) {
                 item {
                     Text(
-                        "这里只改“现在持有多少份”，不记录买卖流水。卖光可以删掉，买新 ETF 可以直接新增代码。",
+                        "滚动区只显示轻量卡片；点某一只再单独编辑。这样不会让十几个输入框一起参与滚动。",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
 
-                itemsIndexed(rows, key = { _, row -> row.id }) { index, row ->
-                    Column(
+                itemsIndexed(draft, key = { _, item -> item.code }) { index, item ->
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                            .clickable { editingIndex = index }
+                            .padding(horizontal = 4.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            OutlinedTextField(
-                                value = row.code,
-                                onValueChange = { next ->
-                                    row.code = next.filter(Char::isDigit).take(6)
-                                    codeError = false
-                                },
-                                label = { Text("证券代码") },
-                                singleLine = true,
-                                modifier = Modifier.weight(1f)
-                            )
-                            OutlinedTextField(
-                                value = row.shares,
-                                onValueChange = { next ->
-                                    row.shares = next.filter { it.isDigit() || it == '.' }
-                                },
-                                label = { Text("持有份额") },
-                                singleLine = true,
-                                modifier = Modifier.weight(1f)
+                        Column(Modifier.weight(1f)) {
+                            Text(item.fallbackName, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "${item.code} · ${formatHopeShares(item.shares)}份",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            OutlinedTextField(
-                                value = row.name,
-                                onValueChange = { next -> row.name = next },
-                                label = { Text("显示名称（可选）") },
-                                singleLine = true,
-                                modifier = Modifier.weight(1f)
-                            )
-                            TextButton(onClick = { rows.removeAt(index) }) { Text("删除") }
-                        }
+                        Text("编辑", color = MaterialTheme.colorScheme.primary)
                     }
                 }
 
@@ -431,47 +393,136 @@ private fun HopeHoldingsEditor(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.End
                     ) {
-                        TextButton(onClick = { rows.add(EditableHolding("", "", "")) }) {
+                        TextButton(onClick = { addingNew = true }) {
                             Text("+ 新增持仓")
                         }
                     }
                 }
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onSave(draft) }) { Text("保存") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        }
+    )
 
-                if (codeError) {
-                    item {
-                        Text(
-                            "证券代码要填 6 位数字，份额要大于 0。",
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall
-                        )
+    editingIndex?.let { index ->
+        val item = draft.getOrNull(index)
+        if (item != null) {
+            HopeHoldingItemEditor(
+                initial = item,
+                onDismiss = { editingIndex = null },
+                onDelete = {
+                    draft = draft.filterIndexed { i, _ -> i != index }
+                    editingIndex = null
+                },
+                onSave = { updated ->
+                    if (draft.any { it.code == updated.code && it.code != item.code }) {
+                        return@HopeHoldingItemEditor
                     }
+                    draft = draft.mapIndexed { i, old -> if (i == index) updated else old }
+                    editingIndex = null
+                }
+            )
+        }
+    }
+
+    if (addingNew) {
+        HopeHoldingItemEditor(
+            initial = null,
+            onDismiss = { addingNew = false },
+            onDelete = null,
+            onSave = { added ->
+                if (draft.none { it.code == added.code }) {
+                    draft = draft + added
+                    addingNew = false
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun HopeHoldingItemEditor(
+    initial: HopeHolding?,
+    onDismiss: () -> Unit,
+    onDelete: (() -> Unit)?,
+    onSave: (HopeHolding) -> Unit
+) {
+    var code by remember(initial?.code) { mutableStateOf(initial?.code.orEmpty()) }
+    var shares by remember(initial?.code) { mutableStateOf(initial?.let { formatHopeShares(it.shares) }.orEmpty()) }
+    var name by remember(initial?.code) { mutableStateOf(initial?.fallbackName.orEmpty()) }
+    var error by remember(initial?.code) { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (initial == null) "新增持仓" else "修改持仓") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = code,
+                    onValueChange = {
+                        code = it.filter(Char::isDigit).take(6)
+                        error = false
+                    },
+                    label = { Text("证券代码") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = shares,
+                    onValueChange = {
+                        shares = it.filter { ch -> ch.isDigit() || ch == '.' }
+                        error = false
+                    },
+                    label = { Text("持有份额") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("显示名称（可选）") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (error) {
+                    Text(
+                        "证券代码要填 6 位数字，份额要大于 0。",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
             }
         },
         confirmButton = {
             Button(
                 onClick = {
-                    val parsed = rows.mapNotNull { row ->
-                        val shares = row.shares.toDoubleOrNull()
-                        if (row.code.length == 6 && shares != null && shares > 0.0) {
-                            HopeHolding(
-                                code = row.code,
-                                market = guessHopeMarket(row.code),
-                                shares = shares,
-                                fallbackName = row.name.ifBlank { row.code }
-                            )
-                        } else null
-                    }
-                    if (parsed.size != rows.size || parsed.map { it.code }.distinct().size != parsed.size) {
-                        codeError = true
+                    val amount = shares.toDoubleOrNull()
+                    if (code.length != 6 || amount == null || amount <= 0.0) {
+                        error = true
                     } else {
-                        onSave(parsed)
+                        onSave(
+                            HopeHolding(
+                                code = code,
+                                market = guessHopeMarket(code),
+                                shares = amount,
+                                fallbackName = name.ifBlank { code }
+                            )
+                        )
                     }
                 }
-            ) { Text("保存") }
+            ) { Text("确定") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            Row {
+                if (onDelete != null) {
+                    TextButton(onClick = onDelete) { Text("删除") }
+                }
+                TextButton(onClick = onDismiss) { Text("取消") }
+            }
         }
     )
 }
