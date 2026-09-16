@@ -6,7 +6,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.AlertDialog
@@ -361,13 +364,18 @@ private fun HopeHoldingsEditor(
         onDismissRequest = onDismiss,
         title = { Text("编辑 HOPE💹 持仓") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    "这里只改“现在持有多少份”，不记录买卖流水。卖光可以删掉，买新 ETF 可以直接新增代码。",
-                    style = MaterialTheme.typography.bodySmall
-                )
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth().heightIn(max = 520.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                item {
+                    Text(
+                        "这里只改“现在持有多少份”，不记录买卖流水。卖光可以删掉，买新 ETF 可以直接新增代码。",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
 
-                rows.forEachIndexed { index, row ->
+                itemsIndexed(rows, key = { _, row -> row.code + ":" + row.name + ":" + row.shares }) { index, row ->
                     ElevatedCard(Modifier.fillMaxWidth()) {
                         Column(
                             Modifier.fillMaxWidth().padding(10.dp),
@@ -413,17 +421,25 @@ private fun HopeHoldingsEditor(
                     }
                 }
 
-                TextButton(
-                    onClick = { rows.add(EditableHolding("", "", "")) },
-                    modifier = Modifier.align(Alignment.End)
-                ) { Text("+ 新增持仓") }
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = { rows.add(EditableHolding("", "", "")) }) {
+                            Text("+ 新增持仓")
+                        }
+                    }
+                }
 
                 if (codeError) {
-                    Text(
-                        "证券代码要填 6 位数字，份额要大于 0。",
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                    item {
+                        Text(
+                            "证券代码要填 6 位数字，份额要大于 0。",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                 }
             }
         },
