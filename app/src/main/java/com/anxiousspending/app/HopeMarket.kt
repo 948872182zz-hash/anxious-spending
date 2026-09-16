@@ -153,46 +153,99 @@ class HopeQuoteStore(context: Context) {
 }
 
 private suspend fun fetchHopeQuotes(holdings: List<HopeHolding>): Map<String, HopeQuote> = withContext(Dispatchers.IO) {
-    coroutineScope {
-        holdings.map { holding ->
+    if (holdings.isEmpty()) return@withContext emptyMap()
+
+    fun openJson(endpoint: String): JSONObject {
+        val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+            connectTimeout = 6000
+            readTimeout = 6000
+            requestMethod = "GET"
+            setRequestProperty("User-Agent", "Mozilla/5.0")
+            setRequestProperty("Referer", "https://quote.eastmoney.com/")
+            useCaches = false
+            setRequestProperty("Cache-Control", "no-cache")
+        }
+        return try {
+            if (connection.responseCode !in 200..299) error("HTTP ${connection.responseCode}")
+            val text = connection.inputStream.bufferedReader().use { it.readText() }
+            JSONObject(text)
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    val token = "fa5fd1943c7b386f172d6893dbfba10b"
+    val byCode = holdings.associateBy { it.code }
+    val secIds = holdings.joinToString(",") { "${it.market}.${it.code}" }
+
+    val batch = runCatching {
+        val endpoint =
+            "https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&invt=2" +
+                "&fields=f2,f3,f4,f12,f14,f18&secids=$secIds&ut=$token"
+        val data = openJson(endpoint).optJSONObject("data") ?: error("No batch data")
+        val diff = data.optJSONArray("diff") ?: error("No batch quotes")
+        buildMap {
+            for (i in 0 until diff.length()) {
+                val item = diff.getJSONObject(i)
+                val code = item.optString("f12")
+                val holding = byCode[code] ?: continue
+                val price = item.optDouble("f2", Double.NaN)
+                val pct = item.optDouble("f3", Double.NaN)
+                val change = item.optDouble("f4", Double.NaN)
+                val previousClose = item.optDouble("f18", Double.NaN)
+                if (!price.isFinite() || price <= 0.0) continue
+                put(
+                    code,
+                    HopeQuote(
+                        code = code,
+                        name = item.optString("f14").ifBlank { holding.fallbackName },
+                        price = price,
+                        previousClose = previousClose.takeIf { it.isFinite() && it > 0.0 }
+                            ?: (price - change.takeIf { it.isFinite() }!!),
+                        change = change.takeIf { it.isFinite() }
+                            ?: if (previousClose.isFinite()) price - previousClose else 0.0,
+                        changePercent = pct.takeIf { it.isFinite() } ?: 0.0,
+                        updatedAtMillis = System.currentTimeMillis()
+                    )
+                )
+            }
+        }
+    }.getOrElse { emptyMap() }
+
+    if (batch.size == holdings.size) return@withContext batch
+
+    val missing = holdings.filter { it.code !in batch }
+    if (missing.isEmpty()) return@withContext batch
+
+    val fallback = coroutineScope {
+        missing.map { holding ->
             async {
                 runCatching {
                     val secId = "${holding.market}.${holding.code}"
-                    val endpoint = "https://push2.eastmoney.com/api/qt/stock/get?invt=2&fltt=2&fields=f43,f57,f58,f60,f169,f170&secid=$secId"
-                    val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
-                        connectTimeout = 6000
-                        readTimeout = 6000
-                        requestMethod = "GET"
-                        setRequestProperty("User-Agent", "Mozilla/5.0")
-                        setRequestProperty("Referer", "https://quote.eastmoney.com/")
-                        useCaches = false
-                        setRequestProperty("Cache-Control", "no-cache")
-                    }
-                    try {
-                        if (connection.responseCode !in 200..299) error("HTTP ${connection.responseCode}")
-                        val text = connection.inputStream.bufferedReader().use { it.readText() }
-                        val data = JSONObject(text).optJSONObject("data") ?: error("No quote data")
-                        val price = data.optDouble("f43", Double.NaN)
-                        val previousClose = data.optDouble("f60", Double.NaN)
-                        val change = data.optDouble("f169", Double.NaN)
-                        val pct = data.optDouble("f170", Double.NaN)
-                        if (!price.isFinite() || price <= 0.0) error("Invalid quote")
-                        HopeQuote(
-                            code = holding.code,
-                            name = data.optString("f58").ifBlank { holding.fallbackName },
-                            price = price,
-                            previousClose = previousClose.takeIf { it.isFinite() } ?: price,
-                            change = change.takeIf { it.isFinite() } ?: (price - previousClose),
-                            changePercent = pct.takeIf { it.isFinite() } ?: 0.0,
-                            updatedAtMillis = System.currentTimeMillis()
-                        )
-                    } finally {
-                        connection.disconnect()
-                    }
+                    val endpoint =
+                        "https://push2.eastmoney.com/api/qt/stock/get?invt=2&fltt=2" +
+                            "&fields=f43,f57,f58,f60,f169,f170&secid=$secId&ut=$token"
+                    val data = openJson(endpoint).optJSONObject("data") ?: error("No quote data")
+                    val price = data.optDouble("f43", Double.NaN)
+                    val previousClose = data.optDouble("f60", Double.NaN)
+                    val change = data.optDouble("f169", Double.NaN)
+                    val pct = data.optDouble("f170", Double.NaN)
+                    if (!price.isFinite() || price <= 0.0) error("Invalid quote")
+                    HopeQuote(
+                        code = holding.code,
+                        name = data.optString("f58").ifBlank { holding.fallbackName },
+                        price = price,
+                        previousClose = previousClose.takeIf { it.isFinite() } ?: price,
+                        change = change.takeIf { it.isFinite() } ?: (price - previousClose),
+                        changePercent = pct.takeIf { it.isFinite() } ?: 0.0,
+                        updatedAtMillis = System.currentTimeMillis()
+                    )
                 }.getOrNull()
             }
         }.awaitAll().filterNotNull().associateBy { it.code }
     }
+
+    batch + fallback
 }
 
 private fun hopeMoney(value: Double): String = "¥%,.2f".format(value)
