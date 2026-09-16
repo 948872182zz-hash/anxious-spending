@@ -8,8 +8,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.AlertDialog
@@ -369,80 +369,77 @@ private fun HopeHoldingsEditor(
         onDismissRequest = onDismiss,
         title = { Text("编辑 HOPE💹 持仓") },
         text = {
-            LazyColumn(
-                modifier = Modifier.fillMaxWidth().heightIn(max = 520.dp),
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 520.dp)
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                item {
-                    Text(
-                        "这里只改“现在持有多少份”，不记录买卖流水。卖光可以删掉，买新 ETF 可以直接新增代码。",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
+                Text(
+                    "这里只改“现在持有多少份”，不记录买卖流水。卖光可以删掉，买新 ETF 可以直接新增代码。",
+                    style = MaterialTheme.typography.bodySmall
+                )
 
-                itemsIndexed(rows, key = { _, row -> row.id }) { index, row ->
-                    ElevatedCard(Modifier.fillMaxWidth()) {
-                        Column(
-                            Modifier.fillMaxWidth().padding(10.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                rows.forEachIndexed { index, row ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            OutlinedTextField(
+                                value = row.code,
+                                onValueChange = { next ->
+                                    row.code = next.filter(Char::isDigit).take(6)
+                                    codeError = false
+                                },
+                                label = { Text("证券代码") },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f)
+                            )
+                            OutlinedTextField(
+                                value = row.shares,
+                                onValueChange = { next ->
+                                    row.shares = next.filter { it.isDigit() || it == '.' }
+                                },
+                                label = { Text("持有份额") },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                OutlinedTextField(
-                                    value = row.code,
-                                    onValueChange = { next ->
-                                        row.code = next.filter(Char::isDigit).take(6)
-                                        codeError = false
-                                    },
-                                    label = { Text("证券代码") },
-                                    singleLine = true,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                OutlinedTextField(
-                                    value = row.shares,
-                                    onValueChange = { next ->
-                                        row.shares = next.filter { it.isDigit() || it == '.' }
-                                    },
-                                    label = { Text("持有份额") },
-                                    singleLine = true,
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                OutlinedTextField(
-                                    value = row.name,
-                                    onValueChange = { next -> row.name = next },
-                                    label = { Text("显示名称（可选）") },
-                                    singleLine = true,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                TextButton(onClick = { rows.removeAt(index) }) { Text("删除") }
-                            }
+                            OutlinedTextField(
+                                value = row.name,
+                                onValueChange = { next -> row.name = next },
+                                label = { Text("显示名称（可选）") },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f)
+                            )
+                            TextButton(onClick = { rows.removeAt(index) }) { Text("删除") }
                         }
                     }
                 }
 
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        TextButton(onClick = { rows.add(EditableHolding("", "", "")) }) {
-                            Text("+ 新增持仓")
-                        }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = { rows.add(EditableHolding("", "", "")) }) {
+                        Text("+ 新增持仓")
                     }
                 }
 
                 if (codeError) {
-                    item {
-                        Text(
-                            "证券代码要填 6 位数字，份额要大于 0。",
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
+                    Text(
+                        "证券代码要填 6 位数字，份额要大于 0。",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
             }
         },
