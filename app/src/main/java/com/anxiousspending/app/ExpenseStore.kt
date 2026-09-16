@@ -2,14 +2,43 @@ package com.anxiousspending.app
 
 import android.content.Context
 import org.json.JSONArray
-import org.json.JSONObject
 import java.time.LocalDate
 
 class ExpenseStore(context: Context) {
-    private val prefs = context.getSharedPreferences("anxious_spending", Context.MODE_PRIVATE)
+    private val appContext = context.applicationContext
+    private val prefs = appContext.getSharedPreferences("anxious_spending", Context.MODE_PRIVATE)
+    private val dao = AnxiousDatabase.get(appContext).expenseDao()
 
-    fun load(): List<Expense> {
-        val raw = prefs.getString(KEY, null) ?: return emptyList()
+    suspend fun load(): List<Expense> {
+        migrateLegacyIfNeeded()
+        return dao.loadAll().map { it.toExpense() }
+    }
+
+    suspend fun save(expenses: List<Expense>) {
+        dao.replaceAll(expenses.map { it.toEntity() })
+    }
+
+    private suspend fun migrateLegacyIfNeeded() {
+        if (prefs.getBoolean(KEY_ROOM_MIGRATED, false)) return
+
+        val existingRoomCount = dao.count()
+        if (existingRoomCount > 0) {
+            prefs.edit().putBoolean(KEY_ROOM_MIGRATED, true).apply()
+            return
+        }
+
+        val legacy = loadLegacy()
+        if (legacy.isNotEmpty()) {
+            dao.insertAll(legacy.map { it.toEntity() })
+        }
+
+        // Keep the old JSON untouched as a temporary fallback. The flag only says
+        // Room has taken over as the active data source.
+        prefs.edit().putBoolean(KEY_ROOM_MIGRATED, true).apply()
+    }
+
+    private fun loadLegacy(): List<Expense> {
+        val raw = prefs.getString(KEY_LEGACY_JSON, null) ?: return emptyList()
         return runCatching {
             val array = JSONArray(raw)
             buildList {
@@ -21,8 +50,6 @@ class ExpenseStore(context: Context) {
                     val paymentSource = if (obj.has("paymentSource")) {
                         obj.optString("paymentSource", "other")
                     } else {
-                        // Legacy migration: all old non-USD entries were paid via Alipay.
-                        // Old USD entries default to Other. Every entry remains editable in the UI.
                         if (currency == "USD") "other" else "alipay"
                     }
                     add(
@@ -44,28 +71,34 @@ class ExpenseStore(context: Context) {
         }.getOrDefault(emptyList())
     }
 
-    fun save(expenses: List<Expense>) {
-        val array = JSONArray()
-        expenses.forEach { expense ->
-            array.put(
-                JSONObject().apply {
-                    put("id", expense.id)
-                    put("amount", expense.amount)
-                    put("category", expense.category)
-                    put("note", expense.note)
-                    put("date", expense.date.toString())
-                    put("currency", expense.currency)
-                    put("exchangeRateToCny", expense.exchangeRateToCny)
-                    put("cnyAmount", expense.cnyAmount)
-                    put("paymentSource", expense.paymentSource)
-                    put("entryType", expense.entryType)
-                }
-            )
-        }
-        prefs.edit().putString(KEY, array.toString()).apply()
-    }
+    private fun Expense.toEntity(): ExpenseEntity = ExpenseEntity(
+        id = id,
+        amount = amount,
+        category = category,
+        note = note,
+        date = date.toString(),
+        currency = currency,
+        exchangeRateToCny = exchangeRateToCny,
+        cnyAmount = cnyAmount,
+        paymentSource = paymentSource,
+        entryType = entryType
+    )
+
+    private fun ExpenseEntity.toExpense(): Expense = Expense(
+        id = id,
+        amount = amount,
+        category = category,
+        note = note,
+        date = LocalDate.parse(date),
+        currency = currency,
+        exchangeRateToCny = exchangeRateToCny,
+        cnyAmount = cnyAmount,
+        paymentSource = paymentSource,
+        entryType = entryType
+    )
 
     private companion object {
-        const val KEY = "expenses_json"
+        const val KEY_LEGACY_JSON = "expenses_json"
+        const val KEY_ROOM_MIGRATED = "room_migration_v1_done"
     }
 }
