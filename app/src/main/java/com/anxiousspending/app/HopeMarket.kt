@@ -375,7 +375,7 @@ private fun HopeHoldingsEditor(
                     )
                 }
 
-                itemsIndexed(rows, key = { _, row -> row.code + ":" + row.name + ":" + row.shares }) { index, row ->
+                itemsIndexed(rows) { index, row ->
                     ElevatedCard(Modifier.fillMaxWidth()) {
                         Column(
                             Modifier.fillMaxWidth().padding(10.dp),
