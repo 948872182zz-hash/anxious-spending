@@ -23,6 +23,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,6 +31,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -148,40 +153,46 @@ class HopeQuoteStore(context: Context) {
 }
 
 private suspend fun fetchHopeQuotes(holdings: List<HopeHolding>): Map<String, HopeQuote> = withContext(Dispatchers.IO) {
-    holdings.mapNotNull { holding ->
-        runCatching {
-            val secId = "${holding.market}.${holding.code}"
-            val endpoint = "https://push2.eastmoney.com/api/qt/stock/get?invt=2&fltt=2&fields=f43,f57,f58,f60,f169,f170&secid=$secId"
-            val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
-                connectTimeout = 8000
-                readTimeout = 8000
-                requestMethod = "GET"
-                setRequestProperty("User-Agent", "Mozilla/5.0")
-                setRequestProperty("Referer", "https://quote.eastmoney.com/")
+    coroutineScope {
+        holdings.map { holding ->
+            async {
+                runCatching {
+                    val secId = "${holding.market}.${holding.code}"
+                    val endpoint = "https://push2.eastmoney.com/api/qt/stock/get?invt=2&fltt=2&fields=f43,f57,f58,f60,f169,f170&secid=$secId"
+                    val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+                        connectTimeout = 6000
+                        readTimeout = 6000
+                        requestMethod = "GET"
+                        setRequestProperty("User-Agent", "Mozilla/5.0")
+                        setRequestProperty("Referer", "https://quote.eastmoney.com/")
+                        useCaches = false
+                        setRequestProperty("Cache-Control", "no-cache")
+                    }
+                    try {
+                        if (connection.responseCode !in 200..299) error("HTTP ${connection.responseCode}")
+                        val text = connection.inputStream.bufferedReader().use { it.readText() }
+                        val data = JSONObject(text).optJSONObject("data") ?: error("No quote data")
+                        val price = data.optDouble("f43", Double.NaN)
+                        val previousClose = data.optDouble("f60", Double.NaN)
+                        val change = data.optDouble("f169", Double.NaN)
+                        val pct = data.optDouble("f170", Double.NaN)
+                        if (!price.isFinite() || price <= 0.0) error("Invalid quote")
+                        HopeQuote(
+                            code = holding.code,
+                            name = data.optString("f58").ifBlank { holding.fallbackName },
+                            price = price,
+                            previousClose = previousClose.takeIf { it.isFinite() } ?: price,
+                            change = change.takeIf { it.isFinite() } ?: (price - previousClose),
+                            changePercent = pct.takeIf { it.isFinite() } ?: 0.0,
+                            updatedAtMillis = System.currentTimeMillis()
+                        )
+                    } finally {
+                        connection.disconnect()
+                    }
+                }.getOrNull()
             }
-            try {
-                if (connection.responseCode !in 200..299) error("HTTP ${connection.responseCode}")
-                val text = connection.inputStream.bufferedReader().use { it.readText() }
-                val data = JSONObject(text).optJSONObject("data") ?: error("No quote data")
-                val price = data.optDouble("f43", Double.NaN)
-                val previousClose = data.optDouble("f60", Double.NaN)
-                val change = data.optDouble("f169", Double.NaN)
-                val pct = data.optDouble("f170", Double.NaN)
-                if (!price.isFinite() || price <= 0.0) error("Invalid quote")
-                HopeQuote(
-                    code = holding.code,
-                    name = data.optString("f58").ifBlank { holding.fallbackName },
-                    price = price,
-                    previousClose = previousClose.takeIf { it.isFinite() } ?: price,
-                    change = change.takeIf { it.isFinite() } ?: (price - previousClose),
-                    changePercent = pct.takeIf { it.isFinite() } ?: 0.0,
-                    updatedAtMillis = System.currentTimeMillis()
-                )
-            } finally {
-                connection.disconnect()
-            }
-        }.getOrNull()
-    }.associateBy { it.code }
+        }.awaitAll().filterNotNull().associateBy { it.code }
+    }
 }
 
 private fun hopeMoney(value: Double): String = "¥%,.2f".format(value)
@@ -205,20 +216,35 @@ fun HopeMarketModule() {
     var quotes by remember { mutableStateOf(quoteStore.load()) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    var refreshNonce by remember { mutableStateOf(0) }
     var showEditHoldings by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
-    LaunchedEffect(refreshNonce, holdings) {
+    fun refreshQuotes() {
+        if (loading) return
+        val holdingsSnapshot = holdings
         loading = true
         error = null
-        val fresh = runCatching { fetchHopeQuotes(holdings) }.getOrElse { emptyMap() }
-        if (fresh.isNotEmpty()) {
-            quotes = quotes + fresh
-            quoteStore.save(quotes.values)
-        } else if (quotes.isEmpty()) {
-            error = "行情暂时没拉到，晚点再试"
+        scope.launch {
+            try {
+                val fresh = runCatching { fetchHopeQuotes(holdingsSnapshot) }.getOrElse { emptyMap() }
+                if (fresh.isNotEmpty()) {
+                    val merged = quotes + fresh
+                    quotes = merged
+                    quoteStore.save(merged.values)
+                    if (fresh.size < holdingsSnapshot.size) {
+                        error = "部分行情没拉到，已保留上次缓存"
+                    }
+                } else {
+                    error = if (quotes.isEmpty()) "行情暂时没拉到，晚点再试" else "刷新失败，仍显示上次缓存"
+                }
+            } finally {
+                loading = false
+            }
         }
-        loading = false
+    }
+
+    LaunchedEffect(Unit) {
+        refreshQuotes()
     }
 
     val rows = holdings.mapNotNull { holding ->
@@ -253,7 +279,7 @@ fun HopeMarketModule() {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         TextButton(onClick = { showEditHoldings = true }) { Text("编辑持仓") }
                         TextButton(
-                            onClick = { refreshNonce += 1 },
+                            onClick = { refreshQuotes() },
                             enabled = !loading
                         ) { Text(if (loading) "刷新中…" else "刷新") }
                     }
@@ -335,7 +361,7 @@ fun HopeMarketModule() {
                 holdings = updated
                 holdingStore.save(updated)
                 showEditHoldings = false
-                refreshNonce += 1
+                refreshQuotes()
             }
         )
     }
