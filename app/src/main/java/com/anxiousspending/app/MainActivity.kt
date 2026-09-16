@@ -28,6 +28,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -1248,17 +1249,21 @@ private fun CalculatorPad(
         rows.forEach { row ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 row.forEach { label ->
+                    val keyShape = RoundedCornerShape(21.dp)
                     Surface(
-                        onClick = {
-                            when (label) {
-                                "C" -> onClear()
-                                "⌫" -> onBackspace()
-                                "=" -> onEquals()
-                                else -> onToken(label)
-                            }
-                        },
-                        modifier = Modifier.weight(1f).height(42.dp),
-                        shape = RoundedCornerShape(21.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(42.dp)
+                            .clip(keyShape)
+                            .clickable {
+                                when (label) {
+                                    "C" -> onClear()
+                                    "⌫" -> onBackspace()
+                                    "=" -> onEquals()
+                                    else -> onToken(label)
+                                }
+                            },
+                        shape = keyShape,
                         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                         color = MaterialTheme.colorScheme.surface
                     ) {
