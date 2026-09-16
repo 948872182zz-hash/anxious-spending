@@ -201,9 +201,9 @@ private suspend fun fetchHopeQuotes(holdings: List<HopeHolding>): Map<String, Ho
                         name = item.optString("f14").ifBlank { holding.fallbackName },
                         price = price,
                         previousClose = previousClose.takeIf { it.isFinite() && it > 0.0 }
-                            ?: (price - change.takeIf { it.isFinite() }!!),
+                            ?: if (change.isFinite()) price - change else price,
                         change = change.takeIf { it.isFinite() }
-                            ?: if (previousClose.isFinite()) price - previousClose else 0.0,
+                            ?: if (previousClose.isFinite() && previousClose > 0.0) price - previousClose else 0.0,
                         changePercent = pct.takeIf { it.isFinite() } ?: 0.0,
                         updatedAtMillis = System.currentTimeMillis()
                     )
