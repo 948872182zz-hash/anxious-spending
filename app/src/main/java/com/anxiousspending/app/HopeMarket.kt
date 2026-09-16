@@ -341,11 +341,16 @@ fun HopeMarketModule() {
     }
 }
 
-private data class EditableHolding(
-    var code: String,
-    var shares: String,
-    var name: String
-)
+private class EditableHolding(
+    code: String,
+    shares: String,
+    name: String
+) {
+    val id: String = java.util.UUID.randomUUID().toString()
+    var code by mutableStateOf(code)
+    var shares by mutableStateOf(shares)
+    var name by mutableStateOf(name)
+}
 
 @Composable
 private fun HopeHoldingsEditor(
@@ -375,7 +380,7 @@ private fun HopeHoldingsEditor(
                     )
                 }
 
-                itemsIndexed(rows) { index, row ->
+                itemsIndexed(rows, key = { _, row -> row.id }) { index, row ->
                     ElevatedCard(Modifier.fillMaxWidth()) {
                         Column(
                             Modifier.fillMaxWidth().padding(10.dp),
@@ -385,7 +390,7 @@ private fun HopeHoldingsEditor(
                                 OutlinedTextField(
                                     value = row.code,
                                     onValueChange = { next ->
-                                        rows[index] = row.copy(code = next.filter(Char::isDigit).take(6))
+                                        row.code = next.filter(Char::isDigit).take(6)
                                         codeError = false
                                     },
                                     label = { Text("证券代码") },
@@ -395,9 +400,7 @@ private fun HopeHoldingsEditor(
                                 OutlinedTextField(
                                     value = row.shares,
                                     onValueChange = { next ->
-                                        rows[index] = row.copy(
-                                            shares = next.filter { it.isDigit() || it == '.' }
-                                        )
+                                        row.shares = next.filter { it.isDigit() || it == '.' }
                                     },
                                     label = { Text("持有份额") },
                                     singleLine = true,
@@ -410,7 +413,7 @@ private fun HopeHoldingsEditor(
                             ) {
                                 OutlinedTextField(
                                     value = row.name,
-                                    onValueChange = { next -> rows[index] = row.copy(name = next) },
+                                    onValueChange = { next -> row.name = next },
                                     label = { Text("显示名称（可选）") },
                                     singleLine = true,
                                     modifier = Modifier.weight(1f)
