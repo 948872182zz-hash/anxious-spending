@@ -1249,7 +1249,7 @@ private fun CalculatorPad(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 row.forEach { label ->
                     Surface(
-                        modifier = Modifier.weight(1f).height(42.dp).clickable {
+                        onClick = {
                             when (label) {
                                 "C" -> onClear()
                                 "⌫" -> onBackspace()
@@ -1257,6 +1257,7 @@ private fun CalculatorPad(
                                 else -> onToken(label)
                             }
                         },
+                        modifier = Modifier.weight(1f).height(42.dp),
                         shape = RoundedCornerShape(21.dp),
                         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
                         color = MaterialTheme.colorScheme.surface
