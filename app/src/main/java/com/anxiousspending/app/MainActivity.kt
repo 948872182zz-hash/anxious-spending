@@ -51,6 +51,8 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.UUID
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -248,7 +250,7 @@ fun AnxiousSpendingApp(
     exchangeRateStore: ExchangeRateStore,
     captureStore: CaptureStore
 ) {
-    var entries by remember { mutableStateOf(store.load()) }
+    var entries by remember { mutableStateOf<List<Expense>>(emptyList()) }
     var noteTagClicks by remember { mutableStateOf(noteTagStore.loadClickCounts()) }
     var rateSnapshot by remember { mutableStateOf(exchangeRateStore.load()) }
     val captureRevision = CaptureSignal.revision
@@ -259,6 +261,7 @@ fun AnxiousSpendingApp(
     var ledgerMonth by rememberSaveable { mutableIntStateOf(0) }
     val ledgerListState = rememberLazyListState()
     val appScope = rememberCoroutineScope()
+    val ledgerSaveMutex = remember { Mutex() }
     val showBackToTop by remember {
         derivedStateOf {
             ledgerListState.firstVisibleItemIndex > 0 || ledgerListState.firstVisibleItemScrollOffset > 240
@@ -272,6 +275,8 @@ fun AnxiousSpendingApp(
     var pendingEdit by remember { mutableStateOf<Expense?>(null) }
 
     LaunchedEffect(Unit) {
+        entries = store.load()
+            .sortedWith(compareByDescending<Expense> { it.date }.thenByDescending { it.id })
         exchangeRateStore.refreshAsync { fresh -> if (fresh != null) rateSnapshot = fresh }
     }
 
@@ -280,8 +285,13 @@ fun AnxiousSpendingApp(
     }
 
     fun persist(next: List<Expense>) {
-        entries = next.sortedWith(compareByDescending<Expense> { it.date }.thenByDescending { it.id })
-        store.save(entries)
+        val snapshot = next.sortedWith(compareByDescending<Expense> { it.date }.thenByDescending { it.id })
+        entries = snapshot
+        appScope.launch {
+            ledgerSaveMutex.withLock {
+                store.save(snapshot)
+            }
+        }
     }
 
     fun registerNoteTagClick(category: String, text: String) {
