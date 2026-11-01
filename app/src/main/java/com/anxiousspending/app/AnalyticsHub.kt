@@ -337,7 +337,7 @@ private fun StatisticsModule(entries: List<Expense>, window: AnalyticsWindow?, o
                 .sortedByDescending { it.amount }
 
             val globalNoteTotals = activeExpenses
-                .filter { (it.category to it.note.trim()) in stablePairs }
+                .filter { it.note.trim().isNotEmpty() }
                 .groupBy { it.note.trim() }
                 .map { (note, list) -> AmountItem(note, note, list.sumOf { it.cnyAmount }, "${list.size}笔") }
                 .sortedByDescending { it.amount }
@@ -362,11 +362,11 @@ private fun StatisticsModule(entries: List<Expense>, window: AnalyticsWindow?, o
                     }
                 }
                 item {
-                    AnalyticsSectionCard("全局常用备注", "真实出现过 3 次及以上 · 拉通所有分类") {
-                        if (globalNoteTotals.isEmpty()) Text("这个时间段还没有可统计的常用备注。")
+                    AnalyticsSectionCard("全局备注", "显示这个时间段内全部有备注的支出 · 拉通所有分类") {
+                        if (globalNoteTotals.isEmpty()) Text("这个时间段还没有带备注的支出。")
                         else AmountBarList(globalNoteTotals) { clicked ->
                             val categories = activeExpenses
-                                .filter { it.note.trim() == clicked.key && (it.category to it.note.trim()) in stablePairs }
+                                .filter { it.note.trim() == clicked.key }
                                 .map { it.category }
                                 .distinct()
                             if (categories.size == 1 && categories.first() != "books") {
